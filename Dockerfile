@@ -40,9 +40,17 @@ COPY expt.qasm expt.qasm
 COPY expt12.qasm expt12.qasm
 COPY expt16.qasm expt16.qasm
 COPY web_dashboard.py web_dashboard.py
+COPY templates/ templates/
 
 # Create directories for outputs
 RUN mkdir -p /app/svg /app/credentials
+
+# Install bash for entrypoint script (before switching to non-root user)
+RUN apt-get update && apt-get install -y --no-install-recommends bash && rm -rf /var/lib/apt/lists/*
+
+# Copy entrypoint script
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 # Create non-root user for security
 RUN useradd -m -u 1000 quantum && chown -R quantum:quantum /app
@@ -58,5 +66,5 @@ ENV QUANTUM_DISPLAY_MODE=svg \
     QUANTUM_QUBITS=5 \
     FLASK_ENV=production
 
-# Run the web dashboard by default
-CMD ["python", "web_dashboard.py"]
+# Run both services
+ENTRYPOINT ["/app/entrypoint.sh"]

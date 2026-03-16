@@ -34,10 +34,16 @@ quantum_state = {
     "status": "ready",
     "message": "",
     "circuit_info": None,
-    "backend_info": None
+    "backend_info": None,
+    "loop_mode": False,
+    "loop_process": None
 }
 
 state_lock = threading.Lock()
+
+# Loop mode process management
+import subprocess
+loop_process = None
 
 
 class QuantumExecutor:
@@ -205,11 +211,67 @@ def execute_circuit():
 
 @app.route("/api/svg")
 def get_svg():
-    """Get the current SVG result"""
+    """Get the current SVG result with auto-refresh"""
     svg_path = SVG_DIR / "pixels.html"
     if svg_path.exists():
-        return send_file(svg_path, mimetype="text/html")
+        # Create an auto-refreshing wrapper page
+        html_content = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                body { margin: 0; padding: 10px; background: #f0f0f0; font-family: Arial, sans-serif; }
+                .container { max-width: 1000px; margin: 0 auto; background: white; padding: 20px; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                #svg-content { margin: 20px 0; }
+                .status { color: #666; font-size: 12px; }
+                .refresh-info { background: #e3f2fd; padding: 10px; border-radius: 3px; margin-bottom: 10px; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h2>🔄 Live Quantum Visualization (Auto-refreshing every 1s)</h2>
+                <div class="refresh-info">
+                    <span class="status">Last updated: <span id="update-time">loading...</span></span>
+                </div>
+                <div id="svg-content"></div>
+            </div>
+
+            <script>
+                function loadSVG() {
+                    fetch('/api/svg/raw')
+                        .then(response => response.text())
+                        .then(html => {
+                            document.getElementById('svg-content').innerHTML = html;
+                            document.getElementById('update-time').textContent = new Date().toLocaleTimeString();
+                        })
+                        .catch(err => {
+                            console.error('Error loading SVG:', err);
+                            document.getElementById('svg-content').innerHTML = '<p style="color: red;">Error loading visualization...</p>';
+                        });
+                }
+
+                // Load immediately
+                loadSVG();
+
+                // Refresh every 1 second
+                setInterval(loadSVG, 1000);
+            </script>
+        </body>
+        </html>
+        """
+        return html_content, 200, {'Content-Type': 'text/html'}
     return jsonify({"error": "No result available"}), 404
+
+
+@app.route("/api/svg/raw")
+def get_svg_raw():
+    """Get the raw SVG content (without wrapper)"""
+    svg_path = SVG_DIR / "pixels.html"
+    if svg_path.exists():
+        with open(svg_path, 'r') as f:
+            return f.read(), 200, {'Content-Type': 'text/html'}
+    return "<p>No visualization available yet. Start the quantum program first.</p>", 404, {'Content-Type': 'text/html'}
 
 
 @app.route("/api/result")
@@ -237,6 +299,89 @@ def config():
             with open(config_path, 'r') as f:
                 return jsonify(json.load(f))
         return jsonify({})
+
+
+@app.route("/api/loop/status", methods=["GET"])
+def get_loop_status():
+    """Get the current loop mode status"""
+    with state_lock:
+        return jsonify({
+            "loop_mode": quantum_state["loop_mode"],
+            "status": quantum_state["status"],
+            "message": quantum_state.get("message", "")
+        })
+
+
+@app.route("/api/loop/start", methods=["POST"])
+def start_loop_mode():
+    """Start continuous loop mode"""
+    global loop_process
+
+    with state_lock:
+        if quantum_state["loop_mode"]:
+            return jsonify({"error": "Loop mode already running"}), 409
+
+        quantum_state["loop_mode"] = True
+        quantum_state["status"] = "starting_loop"
+        quantum_state["message"] = "Starting loop mode..."
+
+    try:
+        # Start the quantum program with loop mode
+        # Using app.py -b:aer -hex (or -b:aer_noise for noise model)
+        app_path = Path(__file__).parent / "app.py"
+        loop_process = subprocess.Popen(
+            ["python", str(app_path), "-b:aer", "-hex"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+
+        with state_lock:
+            quantum_state["status"] = "loop_running"
+            quantum_state["message"] = "Loop mode active - continuously executing quantum circuits"
+
+        return jsonify({"status": "loop_started", "message": "Quantum program running in loop mode"})
+
+    except Exception as e:
+        with state_lock:
+            quantum_state["loop_mode"] = False
+            quantum_state["status"] = "error"
+            quantum_state["message"] = f"Failed to start loop mode: {str(e)}"
+        loop_process = None
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/loop/stop", methods=["POST"])
+def stop_loop_mode():
+    """Stop continuous loop mode"""
+    global loop_process
+
+    with state_lock:
+        if not quantum_state["loop_mode"]:
+            return jsonify({"error": "Loop mode not running"}), 409
+
+    try:
+        if loop_process and loop_process.poll() is None:
+            loop_process.terminate()
+            try:
+                loop_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                loop_process.kill()
+                loop_process.wait()
+
+        with state_lock:
+            quantum_state["loop_mode"] = False
+            quantum_state["status"] = "stopped"
+            quantum_state["message"] = "Loop mode stopped"
+
+        loop_process = None
+        return jsonify({"status": "loop_stopped", "message": "Quantum program stopped"})
+
+    except Exception as e:
+        with state_lock:
+            quantum_state["status"] = "error"
+            quantum_state["message"] = f"Error stopping loop: {str(e)}"
+        return jsonify({"error": str(e)}), 500
 
 
 def generate_result_svg(result):

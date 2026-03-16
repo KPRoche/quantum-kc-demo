@@ -383,12 +383,34 @@
                     </button>
                 </div>
 
+                <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;">
+
+                <h3 style="color: #333; margin-bottom: 10px; font-size: 16px;">🔄 Loop Mode</h3>
+                <p style="color: #666; font-size: 13px; margin-bottom: 15px;">Continuously execute quantum circuits and update the SVG visualization</p>
+
+                <div class="button-group">
+                    <button class="btn-primary" id="loop-start-btn" onclick="startLoopMode()">
+                        ⚡ Start Loop
+                    </button>
+                    <button class="btn-secondary" id="loop-stop-btn" onclick="stopLoopMode()" disabled>
+                        ⏹ Stop Loop
+                    </button>
+                </div>
+
+                <div style="background: #fff9e6; border-left: 4px solid #ffc107; padding: 10px; border-radius: 3px; font-size: 12px; color: #856404; margin-top: 15px;">
+                    <strong>⚠️ Loop Mode:</strong> Runs quantum program continuously with -hex display option
+                </div>
+
                 <div class="status-box">
                     <div class="status-label">
                         <span class="status-indicator ready" id="status-indicator"></span>
                         Status
                     </div>
                     <div class="status-value" id="status-text">Ready</div>
+                </div>
+
+                <div id="loop-status" style="background: #e8f5e9; border-left: 4px solid #4caf50; padding: 10px; border-radius: 3px; font-size: 12px; color: #2e7d32; margin-top: 10px; display: none;">
+                    <strong>✓ Loop Active:</strong> <span id="loop-status-text">Running...</span>
                 </div>
 
                 <div class="info-panel" id="info-panel" style="display: none;">
@@ -451,12 +473,60 @@
                 const status = await response.json();
 
                 updateStatusDisplay(status);
+                updateLoopModeDisplay(status);
 
                 if (status.last_result) {
                     displayResult(status.last_result);
                 }
             } catch (error) {
                 console.error('Status update failed:', error);
+            }
+        }
+
+        async function updateLoopModeDisplay(status) {
+            const loopStatus = document.getElementById('loop-status');
+            const loopStartBtn = document.getElementById('loop-start-btn');
+            const loopStopBtn = document.getElementById('loop-stop-btn');
+
+            if (status.loop_mode) {
+                loopStatus.style.display = 'block';
+                document.getElementById('loop-status-text').textContent = status.message || 'Running...';
+                loopStartBtn.disabled = true;
+                loopStopBtn.disabled = false;
+            } else {
+                loopStatus.style.display = 'none';
+                loopStartBtn.disabled = false;
+                loopStopBtn.disabled = true;
+            }
+        }
+
+        async function startLoopMode() {
+            try {
+                const response = await fetch(`${API_BASE}/loop/start`, { method: 'POST' });
+                if (response.ok) {
+                    console.log('Loop mode started');
+                    updateStatus();
+                } else {
+                    alert('Error starting loop mode');
+                }
+            } catch (error) {
+                console.error('Start loop failed:', error);
+                alert('Error starting loop: ' + error.message);
+            }
+        }
+
+        async function stopLoopMode() {
+            try {
+                const response = await fetch(`${API_BASE}/loop/stop`, { method: 'POST' });
+                if (response.ok) {
+                    console.log('Loop mode stopped');
+                    updateStatus();
+                } else {
+                    alert('Error stopping loop mode');
+                }
+            } catch (error) {
+                console.error('Stop loop failed:', error);
+                alert('Error stopping loop: ' + error.message);
             }
         }
 
