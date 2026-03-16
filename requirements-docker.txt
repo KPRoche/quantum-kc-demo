@@ -1,0 +1,21 @@
+# Lightweight requirements for non-RPi deployment (Docker)
+# Excludes Raspberry Pi specific hardware packages
+
+# Core Quantum Computing
+qiskit==1.2.4
+qiskit-aer==0.15.1
+qiskit-ibm-runtime==0.33.2
+
+# Utilities
+numpy==1.24.2
+requests==2.32.3
+
+# Web Framework for dashboard
+Flask==3.0.0
+Flask-CORS==4.0.0
+
+# SVG and graphics generation
+Pillow==10.0.0
+
+# System utilities
+psutil==5.9.0

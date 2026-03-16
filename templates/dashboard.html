@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quantum Raspberry Tie - Web Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        header h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        @media (max-width: 768px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .card h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 18px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            color: #555;
+            font-weight: 500;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+
+        .form-group select,
+        .form-group input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            background: white;
+            color: #333;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 5px rgba(102, 126, 234, 0.3);
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        button {
+            flex: 1;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #d0d0d0;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.ready {
+            background: #4caf50;
+        }
+
+        .status-indicator.running {
+            background: #2196f3;
+        }
+
+        .status-indicator.error {
+            background: #f44336;
+            animation: none;
+        }
+
+        .status-indicator.success {
+            background: #4caf50;
+            animation: none;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .status-box {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 15px;
+            font-size: 14px;
+        }
+
+        .status-box .status-label {
+            color: #666;
+            font-weight: 500;
+            margin-bottom: 5px;
+        }
+
+        .status-box .status-value {
+            color: #333;
+            font-family: monospace;
+            word-break: break-all;
+        }
+
+        .result-display {
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .result-display.active {
+            display: block;
+        }
+
+        .qubit-results {
+            display: flex;
+            gap: 8px;
+            margin: 15px 0;
+            flex-wrap: wrap;
+        }
+
+        .qubit-box {
+            width: 40px;
+            height: 40px;
+            border: 2px solid #333;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: white;
+            font-size: 12px;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+        }
+
+        .qubit-box.zero {
+            background: #f44336;
+        }
+
+        .qubit-box.one {
+            background: #2196f3;
+        }
+
+        .distribution-chart {
+            margin: 15px 0;
+        }
+
+        .distribution-bar {
+            display: flex;
+            align-items: center;
+            margin: 8px 0;
+            font-size: 12px;
+        }
+
+        .distribution-label {
+            width: 80px;
+            font-family: monospace;
+            font-weight: bold;
+        }
+
+        .distribution-bar-container {
+            flex: 1;
+            height: 20px;
+            background: #e0e0e0;
+            border-radius: 3px;
+            overflow: hidden;
+            margin: 0 10px;
+        }
+
+        .distribution-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            transition: width 0.3s ease;
+        }
+
+        .distribution-percent {
+            width: 50px;
+            text-align: right;
+        }
+
+        .info-panel {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 12px;
+            border-radius: 3px;
+            font-size: 13px;
+            color: #1976d2;
+            margin-top: 15px;
+        }
+
+        .svg-container {
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            margin-top: 15px;
+            text-align: center;
+            min-height: 150px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .svg-container iframe {
+            width: 100%;
+            height: 300px;
+            border: none;
+        }
+
+        .loading-spinner {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        .timestamp {
+            font-size: 12px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌌 Quantum Raspberry Tie</h1>
+            <p>Web Dashboard - Run quantum circuits and visualize results</p>
+        </header>
+
+        <div class="main-grid">
+            <!-- Control Panel -->
+            <div class="card">
+                <h2>⚙️ Control Panel</h2>
+
+                <div class="form-group">
+                    <label for="qasm-file">Quantum Circuit (QASM)</label>
+                    <select id="qasm-file">
+                        <option value="expt.qasm">5-Qubit Random Number Generator</option>
+                        <option value="expt12.qasm">12-Qubit Hex Pattern</option>
+                        <option value="expt16.qasm">16-Qubit Pattern</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="backend">Backend</label>
+                    <select id="backend">
+                        <option value="local">Local Simulator (Aer)</option>
+                        <option value="fake">Fake Backend (FakeManilaV2)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="shots">Number of Shots</label>
+                    <input type="number" id="shots" min="1" max="1000" value="10">
+                </div>
+
+                <div class="button-group">
+                    <button class="btn-primary" id="execute-btn" onclick="executeCircuit()">
+                        ▶ Execute
+                    </button>
+                    <button class="btn-secondary" onclick="loadSVG()">
+                        🔄 Refresh SVG
+                    </button>
+                </div>
+
+                <div class="status-box">
+                    <div class="status-label">
+                        <span class="status-indicator ready" id="status-indicator"></span>
+                        Status
+                    </div>
+                    <div class="status-value" id="status-text">Ready</div>
+                </div>
+
+                <div class="info-panel" id="info-panel" style="display: none;">
+                    <strong>ℹ️ Note:</strong> Results are computed using local quantum simulators. No internet connection required.
+                </div>
+            </div>
+
+            <!-- Results Panel -->
+            <div class="card">
+                <h2>📊 Results</h2>
+
+                <div class="loading-spinner" id="loading-spinner">
+                    <div class="spinner"></div>
+                    <p>Executing circuit...</p>
+                </div>
+
+                <div class="result-display" id="result-display">
+                    <div class="status-box">
+                        <div class="status-label">Most Common Result</div>
+                        <div class="status-value" id="most-common" style="font-size: 18px; font-weight: bold;">
+                            --
+                        </div>
+                    </div>
+
+                    <div id="qubit-display"></div>
+
+                    <div class="distribution-chart" id="distribution-chart"></div>
+
+                    <div class="timestamp">
+                        Executed: <span id="result-timestamp">--</span><br>
+                        Backend: <span id="result-backend">--</span><br>
+                        Shots: <span id="result-shots">--</span>
+                    </div>
+                </div>
+
+                <div style="text-align: center; color: #999; margin-top: 30px;" id="no-result-text">
+                    No results yet. Execute a circuit to see results.
+                </div>
+            </div>
+
+            <!-- SVG Visualization -->
+            <div class="card full-width">
+                <h2>🎨 SVG Visualization</h2>
+                <div class="svg-container">
+                    <div id="svg-content" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #999;">
+                        Execute a circuit to generate visualization
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+        let statusCheckInterval = null;
+
+        async function updateStatus() {
+            try {
+                const response = await fetch(`${API_BASE}/status`);
+                const status = await response.json();
+
+                updateStatusDisplay(status);
+
+                if (status.last_result) {
+                    displayResult(status.last_result);
+                }
+            } catch (error) {
+                console.error('Status update failed:', error);
+            }
+        }
+
+        function updateStatusDisplay(status) {
+            const indicator = document.getElementById('status-indicator');
+            const text = document.getElementById('status-text');
+            const message = status.message || '';
+
+            indicator.className = 'status-indicator ' + status.status;
+            text.textContent = status.status.toUpperCase() + (message ? ': ' + message : '');
+
+            if (status.running) {
+                document.getElementById('execute-btn').disabled = true;
+                document.getElementById('loading-spinner').style.display = 'block';
+                document.getElementById('no-result-text').style.display = 'none';
+            } else {
+                document.getElementById('execute-btn').disabled = false;
+                document.getElementById('loading-spinner').style.display = 'none';
+                if (!status.last_result) {
+                    document.getElementById('no-result-text').style.display = 'block';
+                }
+            }
+        }
+
+        async function executeCircuit() {
+            const qasmFile = document.getElementById('qasm-file').value;
+            const backend = document.getElementById('backend').value;
+            const shots = parseInt(document.getElementById('shots').value);
+
+            try {
+                const response = await fetch(`${API_BASE}/execute`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ qasm_file: qasmFile, backend, shots })
+                });
+
+                if (response.ok) {
+                    console.log('Circuit submitted for execution');
+                    // Start polling for results
+                    if (!statusCheckInterval) {
+                        statusCheckInterval = setInterval(updateStatus, 1000);
+                    }
+                } else {
+                    alert('Error submitting circuit');
+                }
+            } catch (error) {
+                console.error('Execute failed:', error);
+                alert('Error executing circuit: ' + error.message);
+            }
+        }
+
+        function displayResult(result) {
+            if (!result || !result.counts) return;
+
+            document.getElementById('result-display').classList.add('active');
+            document.getElementById('no-result-text').style.display = 'none';
+
+            // Find most common result
+            const mostCommon = Object.entries(result.counts).reduce((a, b) =>
+                a[1] > b[1] ? a : b
+            )[0];
+
+            document.getElementById('most-common').textContent = mostCommon;
+
+            // Display qubit results
+            const qubitDisplay = document.getElementById('qubit-display');
+            qubitDisplay.innerHTML = '<div class="qubit-results">';
+            for (let i = mostCommon.length - 1; i >= 0; i--) {
+                const bit = mostCommon[i];
+                const className = bit === '0' ? 'zero' : 'one';
+                qubitDisplay.innerHTML += `<div class="qubit-box ${className}">Q${i}</div>`;
+            }
+            qubitDisplay.innerHTML += '</div>';
+
+            // Display distribution
+            const distributionChart = document.getElementById('distribution-chart');
+            distributionChart.innerHTML = '<strong>Distribution:</strong>';
+            const totalShots = Object.values(result.counts).reduce((a, b) => a + b, 0);
+            Object.entries(result.counts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5)
+                .forEach(([state, count]) => {
+                    const percent = (count / totalShots * 100).toFixed(1);
+                    const barWidth = (count / totalShots * 100);
+                    distributionChart.innerHTML += `
+                        <div class="distribution-bar">
+                            <div class="distribution-label">${state}</div>
+                            <div class="distribution-bar-container">
+                                <div class="distribution-bar-fill" style="width: ${barWidth}%"></div>
+                            </div>
+                            <div class="distribution-percent">${percent}%</div>
+                        </div>
+                    `;
+                });
+
+            // Update metadata
+            document.getElementById('result-timestamp').textContent =
+                new Date(result.timestamp).toLocaleString();
+            document.getElementById('result-backend').textContent = result.backend;
+            document.getElementById('result-shots').textContent = result.shots;
+        }
+
+        function loadSVG() {
+            const svgContent = document.getElementById('svg-content');
+            fetch(`${API_BASE}/svg`)
+                .then(r => r.text())
+                .then(html => {
+                    svgContent.innerHTML = html;
+                })
+                .catch(() => {
+                    svgContent.innerHTML = '<p style="color: #999;">No SVG available</p>';
+                });
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            updateStatus();
+            statusCheckInterval = setInterval(updateStatus, 2000);
+        });
+
+        window.addEventListener('beforeunload', () => {
+            if (statusCheckInterval) {
+                clearInterval(statusCheckInterval);
+            }
+        });
+    </script>
+</body>
+</html>

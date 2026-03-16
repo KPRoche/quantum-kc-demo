@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  quantum-tie:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: quantum-raspberry-tie
+    ports:
+      - "5000:5000"
+    environment:
+      - QUANTUM_DISPLAY_MODE=svg
+      - QUANTUM_BACKEND=local
+      - QUANTUM_QUBITS=5
+      - FLASK_ENV=production
+    volumes:
+      # Mount credentials directory for persistent IBM Quantum authentication
+      - ./credentials:/app/credentials
+      # Mount SVG output directory to access results
+      - ./svg:/app/svg
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/status"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - quantum-network
+
+networks:
+  quantum-network:
+    driver: bridge
