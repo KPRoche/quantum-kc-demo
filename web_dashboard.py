@@ -7,6 +7,10 @@ import os
 import json
 import threading
 import time
+import queue as queue_module
+import uuid
+import socket
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from flask import Flask, render_template, jsonify, request, send_file
@@ -19,6 +23,16 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 app = Flask(__name__)
 CORS(app)
+
+
+@app.before_request
+def track_http_request():
+    """Track HTTP requests for Prometheus metrics (exclude probes)"""
+    # Exclude health/metrics endpoints from tracking
+    if request.path not in ["/health", "/ready", "/metrics"]:
+        with metrics_lock:
+            key = (request.path, request.method)
+            metrics["http_requests"][key] = metrics["http_requests"].get(key, 0) + 1
 
 # Configuration
 SVG_DIR = Path(__file__).parent / "svg"
@@ -41,8 +55,29 @@ quantum_state = {
 
 state_lock = threading.Lock()
 
+# Startup timestamp for liveness probe
+APP_START_TIME = time.time()
+
+# Cluster node registry
+cluster_registry = {}
+cluster_lock = threading.Lock()
+
+# Job queue management
+job_queue = queue_module.Queue()
+job_store = {}
+job_lock = threading.Lock()
+
+# Prometheus-style metrics
+metrics_lock = threading.Lock()
+metrics = {
+    "jobs_completed": 0,
+    "jobs_failed": 0,
+    "jobs_cancelled": 0,
+    "execution_durations": [],
+    "http_requests": {}
+}
+
 # Loop mode process management
-import subprocess
 loop_process = None
 
 
@@ -114,6 +149,81 @@ class QuantumExecutor:
 
 
 executor = QuantumExecutor()
+
+
+# ============================================================================
+# HEALTH & READINESS PROBES (Kubernetes)
+# ============================================================================
+
+@app.route("/health")
+def health():
+    """Liveness probe: verify app is alive and not deadlocked"""
+    try:
+        # Try to acquire lock with timeout to detect deadlock
+        acquired = state_lock.acquire(timeout=1.0)
+        if not acquired:
+            return jsonify({"status": "error", "reason": "lock_timeout", "timestamp": datetime.now().isoformat()}), 503
+        state_lock.release()
+
+        uptime = time.time() - APP_START_TIME
+        return jsonify({
+            "status": "ok",
+            "uptime_seconds": uptime,
+            "timestamp": datetime.now().isoformat()
+        }), 200
+    except Exception as e:
+        return jsonify({"status": "error", "reason": str(e), "timestamp": datetime.now().isoformat()}), 503
+
+
+@app.route("/ready")
+def ready():
+    """Readiness probe: returns 200 only if Qiskit is initialized and ready"""
+    if executor.qiskit_available:
+        return jsonify({
+            "status": "ready",
+            "qiskit_available": True,
+            "timestamp": datetime.now().isoformat()
+        }), 200
+    else:
+        return jsonify({
+            "status": "not_ready",
+            "reason": "qiskit_not_initialized",
+            "timestamp": datetime.now().isoformat()
+        }), 503
+
+
+# ============================================================================
+# QUBIT MEASUREMENT READ
+# ============================================================================
+
+@app.route("/api/qubits")
+def get_qubits():
+    """Get the latest qubit measurement as a string and structured data"""
+    with state_lock:
+        if not quantum_state["last_result"]:
+            return jsonify({"error": "No measurement available yet"}), 404
+
+        result = quantum_state["last_result"]
+        counts = result.get("counts", {})
+
+    if not counts:
+        return jsonify({"error": "No measurement data available"}), 404
+
+    # Get most common pattern (same logic as SVG generation)
+    pattern = max(counts, key=counts.get)
+    num_qubits = len(pattern)
+
+    # Convert pattern string to structured qubits array
+    qubits = [{"index": i, "value": int(bit)} for i, bit in enumerate(reversed(pattern))]
+
+    return jsonify({
+        "pattern": pattern,
+        "qubits": qubits,
+        "num_qubits": num_qubits,
+        "timestamp": quantum_state.get("last_result_time"),
+        "backend": result.get("backend"),
+        "shots": result.get("shots")
+    }), 200
 
 
 @app.route("/")
@@ -538,6 +648,210 @@ def generate_result_svg(result):
         f.write(svg_content)
 
 
+# ============================================================================
+# CLUSTER COORDINATION
+# ============================================================================
+
+@app.route("/api/cluster/register", methods=["POST"])
+def cluster_register():
+    """Register a node in the cluster"""
+    data = request.json or {}
+    node_id = data.get("node_id") or str(uuid.uuid4())
+    name = data.get("name", "unknown")
+    host = data.get("host", "unknown")
+    port = data.get("port", 5000)
+    capabilities = data.get("capabilities", [])
+
+    with cluster_lock:
+        cluster_registry[node_id] = {
+            "node_id": node_id,
+            "name": name,
+            "host": host,
+            "port": port,
+            "capabilities": capabilities,
+            "registered_at": datetime.now().isoformat(),
+            "last_seen": time.monotonic(),
+            "status": "active"
+        }
+
+    return jsonify({
+        "node_id": node_id,
+        "status": "registered",
+        "message": "Node registered successfully"
+    }), 200
+
+
+@app.route("/api/cluster/heartbeat", methods=["POST"])
+def cluster_heartbeat():
+    """Update last_seen for a node"""
+    data = request.json or {}
+    node_id = data.get("node_id")
+
+    if not node_id:
+        return jsonify({"error": "node_id is required"}), 400
+
+    with cluster_lock:
+        if node_id not in cluster_registry:
+            return jsonify({"error": "Node not found"}), 404
+
+        cluster_registry[node_id]["last_seen"] = time.monotonic()
+        cluster_registry[node_id]["status"] = "active"
+
+    return jsonify({
+        "status": "ok",
+        "node_id": node_id,
+        "timestamp": datetime.now().isoformat()
+    }), 200
+
+
+@app.route("/api/cluster/nodes", methods=["GET"])
+def cluster_nodes():
+    """List all registered nodes"""
+    now = time.monotonic()
+
+    with cluster_lock:
+        nodes = []
+        active = 0
+        inactive = 0
+
+        for node in cluster_registry.values():
+            seconds_ago = now - node["last_seen"]
+            node_copy = node.copy()
+            node_copy["last_seen_seconds_ago"] = seconds_ago
+            nodes.append(node_copy)
+
+            if node["status"] == "active":
+                active += 1
+            else:
+                inactive += 1
+
+    return jsonify({
+        "nodes": nodes,
+        "total": len(nodes),
+        "active": active,
+        "inactive": inactive
+    }), 200
+
+
+@app.route("/api/cluster/nodes/<node_id>", methods=["DELETE"])
+def cluster_deregister(node_id):
+    """Deregister a node"""
+    with cluster_lock:
+        if node_id not in cluster_registry:
+            return jsonify({"error": "Node not found"}), 404
+
+        del cluster_registry[node_id]
+
+    return jsonify({
+        "status": "deregistered",
+        "node_id": node_id
+    }), 200
+
+
+@app.route("/api/cluster/status", methods=["GET"])
+def cluster_status():
+    """Get cluster status summary"""
+    pod_ip = os.environ.get("POD_IP", socket.gethostname())
+    port = os.environ.get("PORT", 5000)
+
+    with cluster_lock:
+        total = len(cluster_registry)
+        active = sum(1 for n in cluster_registry.values() if n["status"] == "active")
+        inactive = total - active
+
+    return jsonify({
+        "total_nodes": total,
+        "active_nodes": active,
+        "inactive_nodes": inactive,
+        "this_node": {
+            "host": pod_ip,
+            "port": port
+        },
+        "timestamp": datetime.now().isoformat()
+    }), 200
+
+
+# ============================================================================
+# PROMETHEUS METRICS
+# ============================================================================
+
+@app.route("/metrics")
+def metrics_endpoint():
+    """Prometheus text exposition format metrics"""
+    with metrics_lock:
+        jobs_completed = metrics["jobs_completed"]
+        jobs_failed = metrics["jobs_failed"]
+        jobs_cancelled = metrics["jobs_cancelled"]
+        execution_durations = metrics["execution_durations"][:]  # copy list
+        http_reqs = metrics["http_requests"].copy()
+
+    # Count running and queued jobs
+    with job_lock:
+        jobs_running = sum(1 for j in job_store.values() if j["status"] == "running")
+        jobs_queued = sum(1 for j in job_store.values() if j["status"] == "queued")
+
+    # Count cluster nodes
+    with cluster_lock:
+        active_nodes = sum(1 for n in cluster_registry.values() if n["status"] == "active")
+        inactive_nodes = sum(1 for n in cluster_registry.values() if n["status"] == "inactive")
+
+    # Loop mode status
+    with state_lock:
+        loop_active = 1 if quantum_state["loop_mode"] else 0
+
+    # Compute execution duration percentiles
+    exec_count = len(execution_durations)
+    exec_sum = sum(execution_durations)
+    if execution_durations:
+        sorted_durations = sorted(execution_durations)
+        p50 = sorted_durations[int(len(sorted_durations) * 0.5)]
+        p90 = sorted_durations[int(len(sorted_durations) * 0.9)]
+        p99 = sorted_durations[int(len(sorted_durations) * 0.99)]
+    else:
+        p50 = p90 = p99 = 0.0
+
+    # Build Prometheus text format
+    lines = []
+    lines.append("# HELP quantum_jobs_total Total quantum jobs by status")
+    lines.append("# TYPE quantum_jobs_total counter")
+    lines.append(f"quantum_jobs_total{{status=\"completed\"}} {jobs_completed}")
+    lines.append(f"quantum_jobs_total{{status=\"failed\"}} {jobs_failed}")
+    lines.append(f"quantum_jobs_total{{status=\"cancelled\"}} {jobs_cancelled}")
+
+    lines.append("# HELP quantum_jobs_running Currently running quantum jobs")
+    lines.append("# TYPE quantum_jobs_running gauge")
+    lines.append(f"quantum_jobs_running {jobs_running}")
+
+    lines.append("# HELP quantum_jobs_queued Jobs waiting in queue")
+    lines.append("# TYPE quantum_jobs_queued gauge")
+    lines.append(f"quantum_jobs_queued {jobs_queued}")
+
+    lines.append("# HELP quantum_circuit_execution_seconds Quantum circuit execution duration")
+    lines.append("# TYPE quantum_circuit_execution_seconds summary")
+    lines.append(f"quantum_circuit_execution_seconds{{quantile=\"0.5\"}} {p50}")
+    lines.append(f"quantum_circuit_execution_seconds{{quantile=\"0.9\"}} {p90}")
+    lines.append(f"quantum_circuit_execution_seconds{{quantile=\"0.99\"}} {p99}")
+    lines.append(f"quantum_circuit_execution_seconds_sum {exec_sum}")
+    lines.append(f"quantum_circuit_execution_seconds_count {exec_count}")
+
+    lines.append("# HELP quantum_cluster_nodes_total Registered cluster nodes by status")
+    lines.append("# TYPE quantum_cluster_nodes_total gauge")
+    lines.append(f"quantum_cluster_nodes_total{{state=\"active\"}} {active_nodes}")
+    lines.append(f"quantum_cluster_nodes_total{{state=\"inactive\"}} {inactive_nodes}")
+
+    lines.append("# HELP quantum_loop_mode_active Whether loop mode is currently active")
+    lines.append("# TYPE quantum_loop_mode_active gauge")
+    lines.append(f"quantum_loop_mode_active {loop_active}")
+
+    lines.append("# HELP http_requests_total Total HTTP requests by endpoint and method")
+    lines.append("# TYPE http_requests_total counter")
+    for (endpoint, method), count in sorted(http_reqs.items()):
+        lines.append(f"http_requests_total{{endpoint=\"{endpoint}\",method=\"{method}\"}} {count}")
+
+    response_text = "\n".join(lines) + "\n"
+    return response_text, 200, {"Content-Type": "text/plain; version=0.0.4; charset=utf-8"}
+
+
 @app.errorhandler(404)
 def not_found(e):
     return jsonify({"error": "Not found"}), 404
@@ -548,11 +862,158 @@ def server_error(e):
     return jsonify({"error": "Server error"}), 500
 
 
+# ============================================================================
+# BACKGROUND THREADS
+# ============================================================================
+
+def stale_node_reaper():
+    """Marks nodes inactive if last_seen > 30s ago"""
+    STALE_THRESHOLD = 30
+    CHECK_INTERVAL = 10
+
+    while True:
+        try:
+            now = time.monotonic()
+            with cluster_lock:
+                for node in cluster_registry.values():
+                    if now - node["last_seen"] > STALE_THRESHOLD:
+                        node["status"] = "inactive"
+                    else:
+                        node["status"] = "active"
+            time.sleep(CHECK_INTERVAL)
+        except Exception as e:
+            print(f"Error in stale_node_reaper: {e}")
+            time.sleep(CHECK_INTERVAL)
+
+
+def job_queue_worker():
+    """Dequeues and executes jobs one at a time"""
+    while True:
+        try:
+            job_id = job_queue.get()  # blocks until a job is available
+
+            with job_lock:
+                job = job_store.get(job_id)
+
+            # Skip if cancelled or not found
+            if job is None or job["status"] == "cancelled":
+                job_queue.task_done()
+                continue
+
+            # Execute the job
+            _execute_queued_job(job_id)
+            job_queue.task_done()
+
+        except Exception as e:
+            print(f"Error in job_queue_worker: {e}")
+            job_queue.task_done()
+
+
+def _execute_queued_job(job_id):
+    """Execute a job from the queue"""
+    global quantum_state
+
+    t0 = time.monotonic()
+
+    try:
+        with job_lock:
+            job = job_store.get(job_id)
+
+        if not job:
+            return
+
+        # Update job status to running
+        with job_lock:
+            job["status"] = "running"
+            job["started_at"] = datetime.now().isoformat()
+
+        # Update global quantum state for backward compatibility
+        with state_lock:
+            quantum_state["running"] = True
+            quantum_state["status"] = "executing"
+
+        parameters = job.get("parameters", {})
+        qasm_file = parameters.get("qasm_file", "expt.qasm")
+        backend = parameters.get("backend", "local")
+        shots = parameters.get("shots", 10)
+
+        # Load QASM file
+        qasm_path = Path(__file__).parent / qasm_file
+        if not qasm_path.exists():
+            raise FileNotFoundError(f"QASM file not found: {qasm_file}")
+
+        with open(qasm_path, 'r') as f:
+            qasm_content = f.read()
+
+        # Load circuit
+        if not executor.load_qasm(qasm_content):
+            raise RuntimeError("Failed to parse QASM")
+
+        # Execute circuit
+        result = executor.execute(backend, shots)
+
+        if result:
+            # Success
+            with job_lock:
+                job["status"] = "completed"
+                job["completed_at"] = datetime.now().isoformat()
+                job["result"] = result
+
+            with state_lock:
+                quantum_state["last_result"] = result
+                quantum_state["last_result_time"] = datetime.now().isoformat()
+                quantum_state["status"] = "success"
+                quantum_state["message"] = "Circuit executed successfully"
+                quantum_state["backend_info"] = {"name": backend, "shots": shots}
+
+            # Record metrics
+            duration = time.monotonic() - t0
+            with metrics_lock:
+                metrics["execution_durations"].append(duration)
+                if len(metrics["execution_durations"]) > 1000:
+                    metrics["execution_durations"].pop(0)
+                metrics["jobs_completed"] += 1
+
+            # Generate SVG
+            generate_result_svg(result)
+
+        else:
+            raise RuntimeError("Execution returned no result")
+
+    except Exception as e:
+        print(f"Error executing job {job_id}: {e}")
+        with job_lock:
+            job["status"] = "failed"
+            job["completed_at"] = datetime.now().isoformat()
+            job["error"] = str(e)
+
+        with state_lock:
+            quantum_state["status"] = "error"
+            quantum_state["message"] = str(e)
+
+        with metrics_lock:
+            metrics["jobs_failed"] += 1
+
+    finally:
+        with state_lock:
+            quantum_state["running"] = False
+
+
 def main():
     """Start the web dashboard"""
     print("Initializing Quantum Executor...")
     if not executor.initialize():
         print("Warning: Qiskit not available, dashboard will be in demo mode")
+
+    # Start background threads
+    print("Starting background threads...")
+    reaper_thread = threading.Thread(target=stale_node_reaper, daemon=True)
+    reaper_thread.start()
+    print("  - Stale node reaper started")
+
+    worker_thread = threading.Thread(target=job_queue_worker, daemon=True)
+    worker_thread.start()
+    print("  - Job queue worker started")
 
     print("Starting web dashboard on http://localhost:5000")
     app.run(host="0.0.0.0", port=5000, debug=False)
