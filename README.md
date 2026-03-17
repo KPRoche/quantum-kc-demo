@@ -1,5 +1,8 @@
-# quantum-raspberry-tie
-<img src='New Logo Screen.png' width='150' alt='display while waiting for results' style='float:right;'><br/> 
+# quantum-kc-demo
+
+> **Note:** This repository is based on [quantum-raspberry-tie](https://github.com/KPRoche/quantum-raspberry-tie)
+
+<img src='New Logo Screen.png' width='150' alt='display while waiting for results' style='float:right;'><br/>
 Your Raspberry Pi running code on the IBM Quantum platform processors or simulators via Python 3 -- with results displayed courtesy of the 8x8 LED array on a SenseHat (or SenseHat emulator)!
 
 ## January 2025 updates
