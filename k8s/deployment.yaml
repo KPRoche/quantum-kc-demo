@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quantum-raspberry-tie
+  labels:
+    app: quantum-raspberry-tie
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quantum-raspberry-tie
+  template:
+    metadata:
+      labels:
+        app: quantum-raspberry-tie
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5000"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: quantum-tie
+        image: quantum-raspberry-tie:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5000
+          name: http
+        env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: PORT
+          value: "5000"
+        - name: QUANTUM_BACKEND
+          value: "local"
+        - name: QUANTUM_QUBITS
+          value: "5"
+        - name: FLASK_ENV
+          value: "production"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 5000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        volumeMounts:
+        - name: credentials
+          mountPath: /app/credentials
+        - name: svg-output
+          mountPath: /app/svg
+      volumes:
+      - name: credentials
+        secret:
+          secretName: ibm-quantum-credentials
+          optional: true
+      - name: svg-output
+        emptyDir: {}

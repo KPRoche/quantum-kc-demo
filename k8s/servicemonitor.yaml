@@ -1,0 +1,14 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: quantum-raspberry-tie
+  labels:
+    app: quantum-raspberry-tie
+spec:
+  selector:
+    matchLabels:
+      app: quantum-raspberry-tie
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 30s
