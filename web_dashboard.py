@@ -301,6 +301,88 @@ def config():
         return jsonify({})
 
 
+@app.route("/api/auth/save", methods=["POST"])
+def save_authentication():
+    """Save IBM Quantum authentication credentials"""
+    data = request.json or {}
+    api_key = data.get("api_key", "").strip()
+    crn = data.get("crn", "").strip()
+
+    if not api_key or not crn:
+        return jsonify({"error": "Both API Key and CRN are required"}), 400
+
+    try:
+        # Import Qiskit Runtime Service
+        from qiskit_ibm_runtime import QiskitRuntimeService
+
+        # Save the account credentials
+        QiskitRuntimeService.save_account(
+            token=api_key,
+            instance=crn,
+            overwrite=True,
+            set_as_default=True
+        )
+
+        # Also store in our config for reference
+        config_path = CREDENTIALS_DIR / "auth.json"
+        auth_data = {
+            "authenticated": True,
+            "timestamp": datetime.now().isoformat(),
+            "crn_masked": crn[:20] + "..." if len(crn) > 20 else crn
+        }
+        with open(config_path, 'w') as f:
+            json.dump(auth_data, f, indent=2)
+
+        return jsonify({
+            "status": "saved",
+            "message": "IBM Quantum credentials saved successfully",
+            "authenticated": True
+        })
+
+    except Exception as e:
+        return jsonify({
+            "error": str(e),
+            "message": "Failed to save credentials"
+        }), 500
+
+
+@app.route("/api/auth/status", methods=["GET"])
+def get_auth_status():
+    """Check if IBM Quantum authentication is configured"""
+    try:
+        from qiskit_ibm_runtime import QiskitRuntimeService
+        from qiskit_ibm_runtime.accounts.exceptions import AccountNotFoundError
+
+        try:
+            service = QiskitRuntimeService()
+            # If we get here, authentication is available
+            config_path = CREDENTIALS_DIR / "auth.json"
+            crn_display = "Configured"
+
+            if config_path.exists():
+                with open(config_path, 'r') as f:
+                    auth_data = json.load(f)
+                    crn_display = auth_data.get("crn_masked", "Configured")
+
+            return jsonify({
+                "authenticated": True,
+                "message": "IBM Quantum credentials are configured",
+                "crn": crn_display
+            })
+
+        except AccountNotFoundError:
+            return jsonify({
+                "authenticated": False,
+                "message": "No IBM Quantum credentials found. Please configure authentication."
+            })
+
+    except Exception as e:
+        return jsonify({
+            "authenticated": False,
+            "message": f"Error checking authentication: {str(e)}"
+        }), 500
+
+
 @app.route("/api/loop/status", methods=["GET"])
 def get_loop_status():
     """Get the current loop mode status"""
