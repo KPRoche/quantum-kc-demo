@@ -1,6 +1,45 @@
 # Cluster API Reference
 
-This document describes the new Kubernetes/OpenShift cluster-aware endpoints added to the Flask API.
+This document describes the Kubernetes/OpenShift cluster-aware endpoints and core quantum execution endpoints.
+
+## 📌 Complete API Reference
+
+For the **comprehensive and authoritative API documentation**, see: [`quantum-kc-demo-API.md`](./quantum-kc-demo-API.md)
+
+This file focuses on cluster coordination, job queue, and Prometheus metrics integration. The main API reference covers all endpoints including execution, configuration, QASM management, and discovery.
+
+## 🔍 API Discovery
+
+### GET /api/endpoints
+Get a comprehensive map of all available API endpoints organized by category.
+
+**Response (200 OK):**
+```json
+{
+  "base_url": "http://localhost:5000",
+  "endpoints": {
+    "core": [...],
+    "execution": [...],
+    "qasm_management": [...],
+    "qubit_measurement": [...],
+    "configuration": [...],
+    "loop_mode": [...],
+    "cluster_coordination": [...],
+    "health_and_monitoring": [...]
+  },
+  "timestamp": "2026-03-18T10:30:00.000000",
+  "total_endpoints": 34
+}
+```
+
+**Usage:**
+```bash
+curl http://localhost:5000/api/endpoints | jq
+```
+
+This endpoint provides **dynamic API discovery** — use it to programmatically discover all available endpoints instead of relying on static documentation.
+
+---
 
 ## Health & Readiness Probes
 
