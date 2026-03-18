@@ -120,6 +120,42 @@ Get raw SVG content without HTML wrapper.
 
 ---
 
+## API Discovery
+
+### GET /api/endpoints
+Get a comprehensive map of all available API endpoints organized by category.
+
+**Response (200 OK):**
+```json
+{
+  "base_url": "http://localhost:5000",
+  "endpoints": {
+    "core": [
+      {"path": "/", "method": "GET", "description": "Serve main dashboard page"},
+      {"path": "/api/status", "method": "GET", "description": "Get current quantum state"},
+      {"path": "/api/result", "method": "GET", "description": "Get last execution result"},
+      {"path": "/api/endpoints", "method": "GET", "description": "Get all available endpoints (this endpoint)"}
+    ],
+    "execution": [...],
+    "qasm_management": [...],
+    "qubit_measurement": [...],
+    "configuration": [...],
+    "loop_mode": [...],
+    "cluster_coordination": [...],
+    "health_and_monitoring": [...]
+  },
+  "timestamp": "2026-03-18T10:30:00.000000",
+  "total_endpoints": 34
+}
+```
+
+**Usage:**
+```bash
+curl http://localhost:5000/api/endpoints
+```
+
+---
+
 ## Circuit Execution
 
 ### GET /api/status
