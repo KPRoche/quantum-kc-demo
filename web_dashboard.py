@@ -232,6 +232,62 @@ def get_qubits():
     }), 200
 
 
+@app.route("/api/endpoints")
+def list_endpoints():
+    """Get a map of all available API endpoints"""
+    endpoints = {
+        "core": [
+            {"path": "/", "method": "GET", "description": "Serve main dashboard page"},
+            {"path": "/api/status", "method": "GET", "description": "Get current quantum state"},
+            {"path": "/api/result", "method": "GET", "description": "Get last execution result"},
+            {"path": "/api/endpoints", "method": "GET", "description": "Get all available endpoints (this endpoint)"}
+        ],
+        "execution": [
+            {"path": "/api/execute", "method": "POST", "description": "Execute a quantum circuit"},
+            {"path": "/api/svg", "method": "GET", "description": "Get SVG result with auto-refresh wrapper"},
+            {"path": "/api/svg/raw", "method": "GET", "description": "Get raw SVG/HTML content without wrapper"}
+        ],
+        "qasm_management": [
+            {"path": "/api/qasm/file", "method": "GET/POST", "description": "Get or save QASM files"},
+            {"path": "/api/qasm/active", "method": "GET/POST", "description": "Get or load active QASM in executor"},
+            {"path": "/api/qasm/circuit", "method": "GET", "description": "Get circuit diagram as HTML with embedded SVG"},
+            {"path": "/api/qasm/circuit/raw", "method": "GET", "description": "Get circuit diagram as raw SVG"}
+        ],
+        "qubit_measurement": [
+            {"path": "/api/qubits", "method": "GET", "description": "Get the latest qubit measurement as string and structured data"}
+        ],
+        "configuration": [
+            {"path": "/api/config", "method": "GET/POST", "description": "Get or set configuration"},
+            {"path": "/api/auth/save", "method": "POST", "description": "Save IBM Quantum credentials"},
+            {"path": "/api/auth/status", "method": "GET", "description": "Check authentication status"}
+        ],
+        "loop_mode": [
+            {"path": "/api/loop/status", "method": "GET", "description": "Get loop mode status"},
+            {"path": "/api/loop/start", "method": "POST", "description": "Start continuous loop execution"},
+            {"path": "/api/loop/stop", "method": "POST", "description": "Stop continuous loop execution"}
+        ],
+        "cluster_coordination": [
+            {"path": "/api/cluster/register", "method": "POST", "description": "Register a node in the cluster"},
+            {"path": "/api/cluster/heartbeat", "method": "POST", "description": "Update last_seen for a node"},
+            {"path": "/api/cluster/nodes", "method": "GET", "description": "List all registered nodes"},
+            {"path": "/api/cluster/nodes/<node_id>", "method": "DELETE", "description": "Deregister a node"},
+            {"path": "/api/cluster/status", "method": "GET", "description": "Get cluster status summary"}
+        ],
+        "health_and_monitoring": [
+            {"path": "/health", "method": "GET", "description": "Liveness probe (Kubernetes)"},
+            {"path": "/ready", "method": "GET", "description": "Readiness probe (Kubernetes)"},
+            {"path": "/metrics", "method": "GET", "description": "Prometheus text exposition format metrics"}
+        ]
+    }
+
+    return jsonify({
+        "base_url": "http://localhost:5000",
+        "endpoints": endpoints,
+        "timestamp": datetime.now().isoformat(),
+        "total_endpoints": sum(len(v) for v in endpoints.values())
+    }), 200
+
+
 @app.route("/")
 def index():
     """Serve the main dashboard page"""
