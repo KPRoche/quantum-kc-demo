@@ -37,8 +37,13 @@ def track_http_request():
 # Configuration
 SVG_DIR = Path(__file__).parent / "svg"
 SVG_DIR.mkdir(exist_ok=True)
+QASM_DIR = Path(__file__).parent / "qasm"
+QASM_DIR.mkdir(exist_ok=True)
 CREDENTIALS_DIR = Path(__file__).parent / "credentials"
 CREDENTIALS_DIR.mkdir(exist_ok=True)
+
+# Preset QASM files in project root
+PRESET_QASM_FILES = ["expt.qasm", "expt12.qasm", "expt16.qasm"]
 
 # Global state
 quantum_state = {
@@ -50,7 +55,8 @@ quantum_state = {
     "circuit_info": None,
     "backend_info": None,
     "loop_mode": False,
-    "loop_process": None
+    "loop_process": None,
+    "qasm_file": "expt.qasm"
 }
 
 state_lock = threading.Lock()
@@ -258,6 +264,7 @@ def execute_circuit():
         with state_lock:
             quantum_state["running"] = True
             quantum_state["status"] = "loading_circuit"
+            quantum_state["qasm_file"] = qasm_file
 
         try:
             # Load QASM file
@@ -391,6 +398,192 @@ def get_result():
         if quantum_state["last_result"]:
             return jsonify(quantum_state["last_result"])
     return jsonify({"error": "No result available"}), 404
+
+
+# ============================================================================
+# QASM MANAGEMENT
+# ============================================================================
+
+@app.route("/api/qasm/file", methods=["GET", "POST"])
+def qasm_file():
+    """Get or save QASM files"""
+    if request.method == "GET":
+        # Get QASM file content
+        filename = request.args.get("name")
+
+        if not filename:
+            # Return currently active QASM file and content
+            with state_lock:
+                filename = quantum_state.get("qasm_file", "expt.qasm")
+
+        # Determine file location
+        if filename in PRESET_QASM_FILES:
+            qasm_path = Path(__file__).parent / filename
+            source = "preset"
+        else:
+            qasm_path = QASM_DIR / filename
+            source = "user"
+
+        # Check if file exists
+        if not qasm_path.exists():
+            return jsonify({"error": f"QASM file not found: {filename}"}), 404
+
+        # Read and return file
+        try:
+            with open(qasm_path, 'r') as f:
+                content = f.read()
+            return jsonify({
+                "name": filename,
+                "content": content,
+                "source": source
+            })
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    elif request.method == "POST":
+        # Save QASM file
+        data = request.json or {}
+        filename = data.get("name", "").strip()
+        content = data.get("content", "").strip()
+
+        if not filename or not content:
+            return jsonify({"error": "Both 'name' and 'content' are required"}), 400
+
+        # Determine file location
+        if filename in PRESET_QASM_FILES:
+            qasm_path = Path(__file__).parent / filename
+            source = "preset"
+        else:
+            qasm_path = QASM_DIR / filename
+            source = "user"
+
+        # Write file
+        try:
+            with open(qasm_path, 'w') as f:
+                f.write(content)
+            return jsonify({
+                "status": "saved",
+                "name": filename,
+                "source": source
+            })
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/qasm/active", methods=["GET", "POST"])
+def qasm_active():
+    """Get or load active QASM in executor"""
+    if request.method == "GET":
+        # Return QASM content currently loaded in executor
+        with state_lock:
+            if not executor.circuit:
+                return jsonify({"error": "No circuit loaded"}), 404
+
+            try:
+                content = executor.circuit.qasm()
+                num_qubits = executor.circuit.num_qubits
+                num_gates = executor.circuit.size()
+
+                return jsonify({
+                    "content": content,
+                    "num_qubits": num_qubits,
+                    "num_gates": num_gates
+                })
+            except Exception as e:
+                return jsonify({"error": str(e)}), 500
+
+    elif request.method == "POST":
+        # Load QASM content into executor
+        data = request.json or {}
+        content = data.get("content", "").strip()
+
+        if not content:
+            return jsonify({"error": "Content is required"}), 400
+
+        try:
+            if not executor.load_qasm(content):
+                return jsonify({"error": "Failed to parse QASM"}), 400
+
+            with state_lock:
+                quantum_state["circuit_info"] = {
+                    "qubits": executor.circuit.num_qubits,
+                    "gates": executor.circuit.size()
+                }
+
+            return jsonify({
+                "status": "loaded",
+                "num_qubits": executor.circuit.num_qubits,
+                "num_gates": executor.circuit.size()
+            })
+        except Exception as e:
+            return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/qasm/circuit", methods=["GET"])
+def get_circuit_diagram():
+    """Get circuit diagram as HTML with embedded SVG"""
+    if not executor.qiskit_available:
+        return jsonify({"error": "Qiskit not available"}), 503
+
+    with state_lock:
+        if not executor.circuit:
+            return jsonify({"error": "No circuit loaded"}), 404
+
+    try:
+        # Generate circuit diagram SVG
+        circuit_svg = str(executor.circuit.draw(output='svg'))
+
+        # Create HTML wrapper
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                body {{ margin: 0; padding: 10px; background: #f0f0f0; font-family: Arial, sans-serif; }}
+                .container {{ max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+                #circuit-content {{ margin: 20px 0; overflow-x: auto; }}
+                .info {{ color: #666; font-size: 12px; margin-top: 10px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h2>Quantum Circuit Diagram</h2>
+                <div id="circuit-content">
+                    {circuit_svg}
+                </div>
+                <div class="info">
+                    <p>Circuit auto-refreshes every 5 seconds</p>
+                </div>
+            </div>
+            <script>
+                setTimeout(() => {{ location.reload(); }}, 5000);
+            </script>
+        </body>
+        </html>
+        """
+        return html_content, 200, {'Content-Type': 'text/html'}
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/qasm/circuit/raw", methods=["GET"])
+def get_circuit_raw():
+    """Get circuit diagram as raw SVG"""
+    if not executor.qiskit_available:
+        return jsonify({"error": "Qiskit not available"}), 503
+
+    with state_lock:
+        if not executor.circuit:
+            return jsonify({"error": "No circuit loaded"}), 404
+
+    try:
+        # Generate circuit diagram SVG
+        circuit_svg = str(executor.circuit.draw(output='svg'))
+        return circuit_svg, 200, {'Content-Type': 'image/svg+xml'}
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/config", methods=["GET", "POST"])
@@ -936,6 +1129,10 @@ def _execute_queued_job(job_id):
         qasm_file = parameters.get("qasm_file", "expt.qasm")
         backend = parameters.get("backend", "local")
         shots = parameters.get("shots", 10)
+
+        # Track qasm_file
+        with state_lock:
+            quantum_state["qasm_file"] = qasm_file
 
         # Load QASM file
         qasm_path = Path(__file__).parent / qasm_file

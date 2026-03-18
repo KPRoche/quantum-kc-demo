@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: quantum-tie
-        image: quantum-raspberry-tie:latest
+        image: ghcr.io/kproche/quantum-kc-demo:latest
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 5000
