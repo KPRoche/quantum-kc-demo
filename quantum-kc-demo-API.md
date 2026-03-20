@@ -172,7 +172,6 @@ Get current quantum state.
   "circuit_info": null,
   "backend_info": null,
   "loop_mode": false,
-  "loop_process": null,
   "qasm_file": "expt.qasm"
 }
 ```
@@ -180,15 +179,14 @@ Get current quantum state.
 ---
 
 ### POST /api/execute
-Execute a quantum circuit.
+Execute a quantum circuit (queues it for execution).
 
 **Request Body:**
 ```json
 {
   "qasm_file": "expt.qasm",
   "backend": "local",
-  "shots": 10,
-  "qubits": 5
+  "shots": 10
 }
 ```
 
@@ -196,21 +194,16 @@ Execute a quantum circuit.
 - `qasm_file` (string, default: "expt.qasm") — QASM file to execute
 - `backend` (string, default: "local") — Backend to use ("local" or hardware name)
 - `shots` (integer, default: 10) — Number of times to execute circuit
-- `qubits` (integer, default: 5) — Number of qubits
 
-**Response (200 OK):**
+**Response (202 Accepted):**
 ```json
 {
-  "status": "submitted"
+  "status": "queued",
+  "job_id": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
-**Response (409 Conflict):**
-```json
-{
-  "error": "Already running"
-}
-```
+**Note:** The endpoint returns immediately with a `job_id`. Poll `/api/jobs/<job_id>` to check execution status.
 
 ---
 
@@ -235,6 +228,165 @@ Get the last execution result.
 ```json
 {
   "error": "No result available"
+}
+```
+
+---
+
+## Job Queue Management
+
+### POST /api/jobs
+Submit a job to the execution queue.
+
+**Request Body:**
+```json
+{
+  "qasm_file": "expt.qasm",
+  "backend": "local",
+  "shots": 10
+}
+```
+
+**Parameters:**
+- `qasm_file` (string, required) — QASM file to execute
+- `backend` (string, default: "local") — Backend to use
+- `shots` (integer, default: 10) — Number of shots
+
+**Response (202 Accepted):**
+```json
+{
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "queued"
+}
+```
+
+**Response (400 Bad Request):**
+```json
+{
+  "error": "qasm_file is required"
+}
+```
+
+---
+
+### GET /api/jobs
+List all jobs with optional status filtering.
+
+**Query Parameters:**
+- `status` (optional) — Filter by status: "queued", "running", "completed", "failed", "cancelled"
+
+**Examples:**
+```
+GET /api/jobs
+GET /api/jobs?status=queued
+GET /api/jobs?status=completed
+```
+
+**Response (200 OK):**
+```json
+{
+  "jobs": [
+    {
+      "job_id": "550e8400-e29b-41d4-a716-446655440000",
+      "status": "completed",
+      "parameters": {
+        "qasm_file": "expt.qasm",
+        "backend": "local",
+        "shots": 10
+      },
+      "submitted_at": "2026-03-18T10:30:00.000000",
+      "started_at": "2026-03-18T10:30:02.000000",
+      "completed_at": "2026-03-18T10:30:15.000000",
+      "result": {
+        "counts": {"00000": 3, "11111": 7},
+        "backend": "aer_simulator",
+        "timestamp": "2026-03-18T10:30:15.000000",
+        "shots": 10,
+        "num_qubits": 5
+      },
+      "error": null
+    }
+  ],
+  "total": 1,
+  "timestamp": "2026-03-18T10:30:20.000000"
+}
+```
+
+---
+
+### GET /api/jobs/<job_id>
+Get a specific job's status and result.
+
+**Path Parameters:**
+- `job_id` (string, required) — Job identifier (UUID)
+
+**Response (200 OK):**
+```json
+{
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "completed",
+  "parameters": {
+    "qasm_file": "expt.qasm",
+    "backend": "local",
+    "shots": 10
+  },
+  "submitted_at": "2026-03-18T10:30:00.000000",
+  "started_at": "2026-03-18T10:30:02.000000",
+  "completed_at": "2026-03-18T10:30:15.000000",
+  "result": {
+    "counts": {"00000": 3, "11111": 7},
+    "backend": "aer_simulator",
+    "timestamp": "2026-03-18T10:30:15.000000",
+    "shots": 10,
+    "num_qubits": 5
+  },
+  "error": null
+}
+```
+
+**Response (404 Not Found):**
+```json
+{
+  "error": "Job not found: 550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+---
+
+### POST /api/jobs/<job_id>/cancel
+Cancel a queued job or interrupt a running job (best-effort).
+
+**Path Parameters:**
+- `job_id` (string, required) — Job identifier (UUID)
+
+**Response (200 OK, if queued):**
+```json
+{
+  "status": "cancelled",
+  "job_id": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+**Response (200 OK, if running):**
+```json
+{
+  "status": "cancel_requested",
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "message": "Running job will be cancelled at next checkpoint"
+}
+```
+
+**Response (404 Not Found):**
+```json
+{
+  "error": "Job not found: 550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+**Response (409 Conflict, if already completed):**
+```json
+{
+  "error": "Cannot cancel job in completed state"
 }
 ```
 

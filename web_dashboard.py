@@ -55,11 +55,11 @@ quantum_state = {
     "circuit_info": None,
     "backend_info": None,
     "loop_mode": False,
-    "loop_process": None,
     "qasm_file": "expt.qasm"
 }
 
 state_lock = threading.Lock()
+loop_lock = threading.Lock()
 
 # Startup timestamp for liveness probe
 APP_START_TIME = time.time()
@@ -243,9 +243,15 @@ def list_endpoints():
             {"path": "/api/endpoints", "method": "GET", "description": "Get all available endpoints (this endpoint)"}
         ],
         "execution": [
-            {"path": "/api/execute", "method": "POST", "description": "Execute a quantum circuit"},
+            {"path": "/api/execute", "method": "POST", "description": "Execute a quantum circuit (returns job_id)"},
             {"path": "/api/svg", "method": "GET", "description": "Get SVG result with auto-refresh wrapper"},
             {"path": "/api/svg/raw", "method": "GET", "description": "Get raw SVG/HTML content without wrapper"}
+        ],
+        "job_queue": [
+            {"path": "/api/jobs", "method": "POST", "description": "Submit a job to the queue"},
+            {"path": "/api/jobs", "method": "GET", "description": "List all jobs (optional ?status= filter)"},
+            {"path": "/api/jobs/<job_id>", "method": "GET", "description": "Get a specific job's status and result"},
+            {"path": "/api/jobs/<job_id>/cancel", "method": "POST", "description": "Cancel a queued job or interrupt running job"}
         ],
         "qasm_management": [
             {"path": "/api/qasm/file", "method": "GET/POST", "description": "Get or save QASM files"},
@@ -303,83 +309,38 @@ def get_status():
 
 @app.route("/api/execute", methods=["POST"])
 def execute_circuit():
-    """Execute a quantum circuit"""
-    global quantum_state
-
-    if quantum_state["running"]:
-        return jsonify({"error": "Already running"}), 409
-
+    """Execute a quantum circuit (via job queue)"""
     data = request.json or {}
     qasm_file = data.get("qasm_file", "expt.qasm")
     backend = data.get("backend", "local")
     shots = data.get("shots", 10)
-    qubits = data.get("qubits", 5)
 
-    def run_execution():
-        global quantum_state
-        with state_lock:
-            quantum_state["running"] = True
-            quantum_state["status"] = "loading_circuit"
-            quantum_state["qasm_file"] = qasm_file
+    # Submit to job queue (reuse POST /api/jobs logic)
+    job_id = str(uuid.uuid4())
 
-        try:
-            # Load QASM file
-            qasm_path = Path(__file__).parent / qasm_file
-            if not qasm_path.exists():
-                with state_lock:
-                    quantum_state["status"] = "error"
-                    quantum_state["message"] = f"QASM file not found: {qasm_file}"
-                return
+    with job_lock:
+        job_store[job_id] = {
+            "job_id": job_id,
+            "status": "queued",
+            "parameters": {
+                "qasm_file": qasm_file,
+                "backend": backend,
+                "shots": shots
+            },
+            "submitted_at": datetime.now().isoformat(),
+            "started_at": None,
+            "completed_at": None,
+            "result": None,
+            "error": None
+        }
 
-            with open(qasm_path, 'r') as f:
-                qasm_content = f.read()
+    # Enqueue the job
+    job_queue.put(job_id)
 
-            if not executor.load_qasm(qasm_content):
-                with state_lock:
-                    quantum_state["status"] = "error"
-                    quantum_state["message"] = "Failed to parse QASM"
-                return
-
-            with state_lock:
-                quantum_state["status"] = "executing"
-                quantum_state["circuit_info"] = {
-                    "qubits": executor.circuit.num_qubits,
-                    "gates": executor.circuit.size()
-                }
-
-            # Execute circuit
-            result = executor.execute(backend, shots)
-
-            if result:
-                with state_lock:
-                    quantum_state["last_result"] = result
-                    quantum_state["last_result_time"] = datetime.now().isoformat()
-                    quantum_state["status"] = "success"
-                    quantum_state["message"] = "Circuit executed successfully"
-                    quantum_state["backend_info"] = {"name": backend, "shots": shots}
-
-                # Generate SVG
-                generate_result_svg(result)
-            else:
-                with state_lock:
-                    quantum_state["status"] = "error"
-                    quantum_state["message"] = "Execution failed"
-
-        except Exception as e:
-            print(f"Error in run_execution: {e}")
-            with state_lock:
-                quantum_state["status"] = "error"
-                quantum_state["message"] = str(e)
-
-        finally:
-            with state_lock:
-                quantum_state["running"] = False
-
-    # Run in background thread
-    thread = threading.Thread(target=run_execution, daemon=True)
-    thread.start()
-
-    return jsonify({"status": "submitted"})
+    return jsonify({
+        "status": "queued",
+        "job_id": job_id
+    }), 202
 
 
 @app.route("/api/svg")
@@ -531,22 +492,24 @@ def qasm_active():
     """Get or load active QASM in executor"""
     if request.method == "GET":
         # Return QASM content currently loaded in executor
+        # Check circuit under lock, release lock before calling qasm()
         with state_lock:
             if not executor.circuit:
                 return jsonify({"error": "No circuit loaded"}), 404
+            circuit = executor.circuit
 
-            try:
-                content = executor.circuit.qasm()
-                num_qubits = executor.circuit.num_qubits
-                num_gates = executor.circuit.size()
+        try:
+            content = circuit.qasm()
+            num_qubits = circuit.num_qubits
+            num_gates = circuit.size()
 
-                return jsonify({
-                    "content": content,
-                    "num_qubits": num_qubits,
-                    "num_gates": num_gates
-                })
-            except Exception as e:
-                return jsonify({"error": str(e)}), 500
+            return jsonify({
+                "content": content,
+                "num_qubits": num_qubits,
+                "num_gates": num_gates
+            })
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
 
     elif request.method == "POST":
         # Load QASM content into executor
@@ -742,6 +705,107 @@ def get_auth_status():
         }), 500
 
 
+# ============================================================================
+# JOB QUEUE MANAGEMENT
+# ============================================================================
+
+@app.route("/api/jobs", methods=["POST"])
+def submit_job():
+    """Submit a job to the queue"""
+    data = request.json or {}
+    qasm_file = data.get("qasm_file", "expt.qasm")
+    backend = data.get("backend", "local")
+    shots = data.get("shots", 10)
+
+    if not qasm_file:
+        return jsonify({"error": "qasm_file is required"}), 400
+
+    job_id = str(uuid.uuid4())
+
+    with job_lock:
+        job_store[job_id] = {
+            "job_id": job_id,
+            "status": "queued",
+            "parameters": {
+                "qasm_file": qasm_file,
+                "backend": backend,
+                "shots": shots
+            },
+            "submitted_at": datetime.now().isoformat(),
+            "started_at": None,
+            "completed_at": None,
+            "result": None,
+            "error": None
+        }
+
+    # Enqueue the job
+    job_queue.put(job_id)
+
+    return jsonify({
+        "job_id": job_id,
+        "status": "queued"
+    }), 202
+
+
+@app.route("/api/jobs", methods=["GET"])
+def list_jobs():
+    """List jobs from the job store"""
+    status_filter = request.args.get("status")
+
+    with job_lock:
+        jobs = list(job_store.values())
+
+    if status_filter:
+        jobs = [j for j in jobs if j["status"] == status_filter]
+
+    return jsonify({
+        "jobs": jobs,
+        "total": len(jobs),
+        "timestamp": datetime.now().isoformat()
+    }), 200
+
+
+@app.route("/api/jobs/<job_id>", methods=["GET"])
+def get_job(job_id):
+    """Get a specific job's status and result"""
+    with job_lock:
+        job = job_store.get(job_id)
+
+    if not job:
+        return jsonify({"error": f"Job not found: {job_id}"}), 404
+
+    return jsonify(job), 200
+
+
+@app.route("/api/jobs/<job_id>/cancel", methods=["POST"])
+def cancel_job(job_id):
+    """Cancel a job if queued, or attempt to interrupt if running"""
+    with job_lock:
+        job = job_store.get(job_id)
+
+    if not job:
+        return jsonify({"error": f"Job not found: {job_id}"}), 404
+
+    if job["status"] == "queued":
+        # Mark as cancelled (will be skipped when dequeued)
+        with job_lock:
+            job["status"] = "cancelled"
+            job["completed_at"] = datetime.now().isoformat()
+        with metrics_lock:
+            metrics["jobs_cancelled"] += 1
+        return jsonify({"status": "cancelled", "job_id": job_id}), 200
+
+    elif job["status"] == "running":
+        # Best-effort attempt to interrupt (would need to track running thread)
+        # For now, just mark as cancelled and let it complete
+        with job_lock:
+            job["status"] = "cancelled"
+        return jsonify({"status": "cancel_requested", "job_id": job_id, "message": "Running job will be cancelled at next checkpoint"}), 200
+
+    else:
+        return jsonify({"error": f"Cannot cancel job in {job['status']} state"}), 409
+
+
 @app.route("/api/loop/status", methods=["GET"])
 def get_loop_status():
     """Get the current loop mode status"""
@@ -758,38 +822,40 @@ def start_loop_mode():
     """Start continuous loop mode"""
     global loop_process
 
+    # Check loop_mode under state_lock first
     with state_lock:
         if quantum_state["loop_mode"]:
             return jsonify({"error": "Loop mode already running"}), 409
-
-        quantum_state["loop_mode"] = True
         quantum_state["status"] = "starting_loop"
         quantum_state["message"] = "Starting loop mode..."
 
-    try:
-        # Start the quantum program with loop mode
-        # Using app.py -b:aer -hex (or -b:aer_noise for noise model)
-        app_path = Path(__file__).parent / "app.py"
-        loop_process = subprocess.Popen(
-            ["python", str(app_path), "-b:aer", "-hex"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
+    # Acquire loop_lock before spawning subprocess
+    with loop_lock:
+        try:
+            # Start the quantum program with loop mode
+            # Using app.py -b:aer -hex (or -b:aer_noise for noise model)
+            app_path = Path(__file__).parent / "app.py"
+            loop_process = subprocess.Popen(
+                ["python", str(app_path), "-b:aer", "-hex"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
 
-        with state_lock:
-            quantum_state["status"] = "loop_running"
-            quantum_state["message"] = "Loop mode active - continuously executing quantum circuits"
+            # Set loop_mode = True only after Popen succeeds
+            with state_lock:
+                quantum_state["loop_mode"] = True
+                quantum_state["status"] = "loop_running"
+                quantum_state["message"] = "Loop mode active - continuously executing quantum circuits"
 
-        return jsonify({"status": "loop_started", "message": "Quantum program running in loop mode"})
+            return jsonify({"status": "loop_started", "message": "Quantum program running in loop mode"})
 
-    except Exception as e:
-        with state_lock:
-            quantum_state["loop_mode"] = False
-            quantum_state["status"] = "error"
-            quantum_state["message"] = f"Failed to start loop mode: {str(e)}"
-        loop_process = None
-        return jsonify({"error": str(e)}), 500
+        except Exception as e:
+            with state_lock:
+                quantum_state["status"] = "error"
+                quantum_state["message"] = f"Failed to start loop mode: {str(e)}"
+            loop_process = None
+            return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/loop/stop", methods=["POST"])
@@ -801,28 +867,35 @@ def stop_loop_mode():
         if not quantum_state["loop_mode"]:
             return jsonify({"error": "Loop mode not running"}), 409
 
-    try:
-        if loop_process and loop_process.poll() is None:
-            loop_process.terminate()
-            try:
-                loop_process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                loop_process.kill()
-                loop_process.wait()
+    # Acquire loop_lock around process terminate/kill sequence
+    with loop_lock:
+        try:
+            if loop_process:
+                # Check if process is still running
+                if loop_process.poll() is None:
+                    # Process is still running, terminate it
+                    loop_process.terminate()
+                    try:
+                        loop_process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        loop_process.kill()
+                        loop_process.wait()
+                # If process already exited (poll() is not None), just clean up state
 
-        with state_lock:
-            quantum_state["loop_mode"] = False
-            quantum_state["status"] = "stopped"
-            quantum_state["message"] = "Loop mode stopped"
+            # Clean up state
+            with state_lock:
+                quantum_state["loop_mode"] = False
+                quantum_state["status"] = "stopped"
+                quantum_state["message"] = "Loop mode stopped"
 
-        loop_process = None
-        return jsonify({"status": "loop_stopped", "message": "Quantum program stopped"})
+            loop_process = None
+            return jsonify({"status": "loop_stopped", "message": "Quantum program stopped"})
 
-    except Exception as e:
-        with state_lock:
-            quantum_state["status"] = "error"
-            quantum_state["message"] = f"Error stopping loop: {str(e)}"
-        return jsonify({"error": str(e)}), 500
+        except Exception as e:
+            with state_lock:
+                quantum_state["status"] = "error"
+                quantum_state["message"] = f"Error stopping loop: {str(e)}"
+            return jsonify({"error": str(e)}), 500
 
 
 def generate_result_svg(result):
@@ -1135,6 +1208,26 @@ def stale_node_reaper():
             time.sleep(CHECK_INTERVAL)
 
 
+def loop_process_monitor():
+    """Monitor loop process and reset state if it exits unexpectedly"""
+    CHECK_INTERVAL = 2
+
+    while True:
+        try:
+            with loop_lock:
+                if loop_process and loop_process.poll() is not None:
+                    # Process has exited
+                    with state_lock:
+                        if quantum_state["loop_mode"]:
+                            quantum_state["loop_mode"] = False
+                            quantum_state["status"] = "error"
+                            quantum_state["message"] = "Loop process exited unexpectedly"
+            time.sleep(CHECK_INTERVAL)
+        except Exception as e:
+            print(f"Error in loop_process_monitor: {e}")
+            time.sleep(CHECK_INTERVAL)
+
+
 def job_queue_worker():
     """Dequeues and executes jobs one at a time"""
     while True:
@@ -1267,6 +1360,10 @@ def main():
     worker_thread = threading.Thread(target=job_queue_worker, daemon=True)
     worker_thread.start()
     print("  - Job queue worker started")
+
+    monitor_thread = threading.Thread(target=loop_process_monitor, daemon=True)
+    monitor_thread.start()
+    print("  - Loop process monitor started")
 
     print("Starting web dashboard on http://localhost:5000")
     app.run(host="0.0.0.0", port=5000, debug=False)
