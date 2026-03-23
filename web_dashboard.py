@@ -256,8 +256,9 @@ def list_endpoints():
         "qasm_management": [
             {"path": "/api/qasm/file", "method": "GET/POST", "description": "Get or save QASM files"},
             {"path": "/api/qasm/active", "method": "GET/POST", "description": "Get or load active QASM in executor"},
-            {"path": "/api/qasm/circuit", "method": "GET", "description": "Get circuit diagram as HTML with embedded SVG"},
-            {"path": "/api/qasm/circuit/raw", "method": "GET", "description": "Get circuit diagram as raw SVG"}
+            {"path": "/api/qasm/circuit", "method": "GET", "description": "Get circuit diagram as HTML with matplotlib image"},
+            {"path": "/api/qasm/circuit/raw", "method": "GET", "description": "Get circuit diagram as ASCII art text (returns 'circuit not rendered yet' if no circuit)"},
+            {"path": "/api/qasm/circuit/ascii", "method": "GET", "description": "Get circuit diagram as ASCII art text drawing (same as /circuit/raw)"}
         ],
         "qubit_measurement": [
             {"path": "/api/qubits", "method": "GET", "description": "Get the latest qubit measurement as string and structured data"}
@@ -540,7 +541,7 @@ def qasm_active():
 
 @app.route("/api/qasm/circuit", methods=["GET"])
 def get_circuit_diagram():
-    """Get circuit diagram as HTML with embedded SVG"""
+    """Get circuit diagram as HTML with matplotlib rendering"""
     if not executor.qiskit_available:
         return jsonify({"error": "Qiskit not available"}), 503
 
@@ -549,10 +550,19 @@ def get_circuit_diagram():
             return jsonify({"error": "No circuit loaded"}), 404
 
     try:
-        # Generate circuit diagram SVG
-        circuit_svg = str(executor.circuit.draw(output='svg'))
+        # Generate circuit diagram using matplotlib
+        from io import BytesIO
+        import base64
 
-        # Create HTML wrapper
+        fig = executor.circuit.draw(output='mpl')
+
+        # Convert matplotlib figure to PNG base64
+        buffer = BytesIO()
+        fig.savefig(buffer, format='png', bbox_inches='tight')
+        buffer.seek(0)
+        image_base64 = base64.b64encode(buffer.read()).decode()
+
+        # Create HTML wrapper with embedded image
         html_content = f"""
         <!DOCTYPE html>
         <html>
@@ -561,7 +571,8 @@ def get_circuit_diagram():
             <style>
                 body {{ margin: 0; padding: 10px; background: #f0f0f0; font-family: Arial, sans-serif; }}
                 .container {{ max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
-                #circuit-content {{ margin: 20px 0; overflow-x: auto; }}
+                #circuit-content {{ margin: 20px 0; overflow-x: auto; text-align: center; }}
+                img {{ max-width: 100%; height: auto; }}
                 .info {{ color: #666; font-size: 12px; margin-top: 10px; }}
             </style>
         </head>
@@ -569,7 +580,7 @@ def get_circuit_diagram():
             <div class="container">
                 <h2>Quantum Circuit Diagram</h2>
                 <div id="circuit-content">
-                    {circuit_svg}
+                    <img src="data:image/png;base64,{image_base64}" alt="Quantum Circuit Diagram">
                 </div>
                 <div class="info">
                     <p>Circuit auto-refreshes every 5 seconds</p>
@@ -589,20 +600,38 @@ def get_circuit_diagram():
 
 @app.route("/api/qasm/circuit/raw", methods=["GET"])
 def get_circuit_raw():
-    """Get circuit diagram as raw SVG"""
+    """Get circuit diagram as ASCII art text"""
     if not executor.qiskit_available:
         return jsonify({"error": "Qiskit not available"}), 503
 
     with state_lock:
         if not executor.circuit:
-            return jsonify({"error": "No circuit loaded"}), 404
+            return "circuit not rendered yet", 200, {'Content-Type': 'text/plain'}
 
     try:
-        # Generate circuit diagram SVG
-        circuit_svg = str(executor.circuit.draw(output='svg'))
-        return circuit_svg, 200, {'Content-Type': 'image/svg+xml'}
+        # Generate circuit diagram as ASCII/text art
+        circuit_ascii = str(executor.circuit.draw(output='text'))
+        return circuit_ascii, 200, {'Content-Type': 'text/plain'}
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return f"Error generating circuit: {str(e)}", 500, {'Content-Type': 'text/plain'}
+
+
+@app.route("/api/qasm/circuit/ascii", methods=["GET"])
+def get_circuit_ascii():
+    """Get circuit diagram as ASCII art text drawing"""
+    if not executor.qiskit_available:
+        return jsonify({"error": "Qiskit not available"}), 503
+
+    with state_lock:
+        if not executor.circuit:
+            return "circuit not rendered yet", 200, {'Content-Type': 'text/plain'}
+
+    try:
+        # Generate circuit diagram as ASCII/text art
+        circuit_ascii = str(executor.circuit.draw(output='text'))
+        return circuit_ascii, 200, {'Content-Type': 'text/plain'}
+    except Exception as e:
+        return f"Error generating circuit: {str(e)}", 500, {'Content-Type': 'text/plain'}
 
 
 @app.route("/api/config", methods=["GET", "POST"])
