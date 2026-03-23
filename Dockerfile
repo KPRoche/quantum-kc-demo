@@ -25,6 +25,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libopenblas-dev \
     libgomp1 \
+    libfreetype6 \
+    libpng16-16 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy wheels from builder
@@ -35,7 +37,7 @@ COPY requirements-docker.txt .
 RUN pip install --no-cache /wheels/* && rm -rf /wheels
 
 # Copy application files
-COPY QuantumRaspberryTie.v7_1.py app.py
+COPY QuantumKCDemo.v0_2.py app.py
 COPY expt.qasm expt.qasm
 COPY expt12.qasm expt12.qasm
 COPY expt16.qasm expt16.qasm
