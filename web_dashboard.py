@@ -923,7 +923,10 @@ def start_loop_mode():
     with loop_lock:
         try:
             # Start the quantum program with loop mode
-            app_path = Path(__file__).parent / "QuantumKCDemo.v0_2.py"
+            # Try qapp.py first (standard name in container), then QuantumKCDemo.v0_2.py (development)
+            app_path = Path(__file__).parent / "qapp.py"
+            if not app_path.exists():
+                app_path = Path(__file__).parent / "QuantumKCDemo.v0_2.py"
 
             # Build arguments from saved configuration
             cmd_args = ["python3", str(app_path)]

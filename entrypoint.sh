@@ -3,7 +3,7 @@ set -e
 
 # Start the quantum program in background (writes SVG updates with 8x8 grid)
 echo "Starting quantum program..."
-python app.py -b:aer -hex &
+python qapp.py -b:aer -hex &
 QUANTUM_PID=$!
 
 # Give it a moment to start
