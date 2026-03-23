@@ -833,13 +833,19 @@ def start_loop_mode():
     with loop_lock:
         try:
             # Start the quantum program with loop mode
-            # Using app.py -b:aer -hex (or -b:aer_noise for noise model)
-            app_path = Path(__file__).parent / "app.py"
+            # Using QuantumKCDemo.v0_2.py -b:aer -hex (or -b:aer_noise for noise model)
+            app_path = Path(__file__).parent / "QuantumKCDemo.v0_2.py"
+
+            # Set up environment to ensure SVG output goes to the Flask svg directory
+            env = os.environ.copy()
+            env["SVG_OUTPUT_DIR"] = str(SVG_DIR)
+
             loop_process = subprocess.Popen(
-                ["python", str(app_path), "-b:aer", "-hex"],
+                ["python3", str(app_path), "-b:aer", "-hex"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True
+                text=True,
+                env=env
             )
 
             # Set loop_mode = True only after Popen succeeds
