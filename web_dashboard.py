@@ -817,6 +817,67 @@ def get_loop_status():
         })
 
 
+def build_quantum_args():
+    """Build command-line arguments for QuantumKCDemo from saved configuration"""
+    args = []
+
+    # Load configuration
+    config_path = CREDENTIALS_DIR / "config.json"
+    config = {}
+    if config_path.exists():
+        try:
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+        except Exception:
+            pass
+
+    # Backend option (default: -b:aer)
+    backend = config.get("backend", "aer").lower()
+    if backend == "aer":
+        args.append("-b:aer")
+    elif backend == "aer_noise" or backend == "aer_model":
+        args.append("-b:aer_noise")
+    elif backend.startswith("b:"):
+        args.append(f"-{backend}")
+    elif backend != "aer":
+        # Custom backend name
+        args.append(f"-b:{backend}")
+    else:
+        args.append("-b:aer")
+
+    # Noise model (if specified separately from backend)
+    if config.get("noise_model") and "noise" not in backend.lower():
+        args.append("-b:aer_noise")
+
+    # Display mode (default: -hex for 12-qubit hex display)
+    display_mode = config.get("display_mode", "hex").lower()
+    if display_mode == "hex":
+        args.append("-hex")
+    elif display_mode == "tee":
+        args.append("-tee")
+    elif display_mode == "d16" or display_mode == "16":
+        args.append("-d16")
+    elif display_mode == "bowtie" or display_mode == "5":
+        pass  # bowtie is default, no flag needed
+
+    # QASM file (if specified)
+    qasm_file = config.get("qasm_file")
+    if qasm_file:
+        args.append(f"-f:{qasm_file}")
+
+    # Additional boolean flags
+    if config.get("no_logo"):
+        args.append("-noq")
+    if config.get("emulator"):
+        args.append("-e")
+    if config.get("dual_display"):
+        args.append("-d")
+    if config.get("neopixel_continuous"):
+        args.append("-notile")
+
+    return args
+
+
 @app.route("/api/loop/start", methods=["POST"])
 def start_loop_mode():
     """Start continuous loop mode"""
@@ -833,15 +894,18 @@ def start_loop_mode():
     with loop_lock:
         try:
             # Start the quantum program with loop mode
-            # Using QuantumKCDemo.v0_2.py -b:aer -hex (or -b:aer_noise for noise model)
             app_path = Path(__file__).parent / "QuantumKCDemo.v0_2.py"
+
+            # Build arguments from saved configuration
+            cmd_args = ["python3", str(app_path)]
+            cmd_args.extend(build_quantum_args())
 
             # Set up environment to ensure SVG output goes to the Flask svg directory
             env = os.environ.copy()
             env["SVG_OUTPUT_DIR"] = str(SVG_DIR)
 
             loop_process = subprocess.Popen(
-                ["python3", str(app_path), "-b:aer", "-hex"],
+                cmd_args,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
