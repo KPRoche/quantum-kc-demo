@@ -163,25 +163,25 @@ to add those modulles.
 
 To use the cloud-based IBM Processors, or build a real-processor based noise model simulator,  you must have an account set up at the IBM Quantum Platform and obtain your API Token from the your account. After installing QISKit, activate the virtual environment for it and follow the instructions here to store your account authentication on your Raspberry Pi: https://docs.quantum.ibm.com/start/setup-channel#set-up-to-use-ibm-quantum-platform
 
-Download the source code for the QuantumRaspberryTie program and the code should be ready to run!
+Download the source code for the QuantumKCDemo program and the code should be ready to run!
 Be sure to download the OPENQASM files as well (_expt.qasm_, _expt12.qasm_ & _expt16.qasm_) for the probram and put them in the same directory as your source file.
 
 # Versions
 There is now a single version of the code, which can run in one of two quantum processor-size modes. 
 Both require that the **sense-hat**, **sense-emu** and **qiskit** libraries be installed in order to function, and use the **threading**, **time**, and **datetime** modules.
 
-## QuantumRaspberryTie.qk1.py
-If running with any options requiring data from the online IBM Quantum platform, this program tries to test its connection to the IBM Quantum website before making requests. 
+## QuantumKCDemo.v0_2.py
+If running with any options requiring data from the online IBM Quantum platform, this program tries to test its connection to the IBM Quantum website before making requests.
 It will prompt for authentication information and save it via the QiskitRuntime.save_account() method if you wish to do so.
 It's designed to cope somewhat gracefully with what happens if you are running on batteries and your Raspberry Pi switches wireless access points as you move around, or are in a somewhat glitchy wifi environment. It also can now handle gracefully communications timeouts with the IBM Quantum cloud, or the occasional glitch where the simulator queue status for a job gets stuck in "RUNNING" state.
 
 To start the program, after activating the qiskit virtual environment, simply call it from its directory (on my system, the default version of python is python 3.9; add the version number if necessary on your system):
-+     *python QuantumRaspberryTie.qk1*  
-          will launch with the default (5-qubit) quantum circuit 
-          
-+     *python QuantumRaspberryTie.qk1 16*  
++     *python QuantumKCDemo.v0_2*
+          will launch with the default (5-qubit) quantum circuit
+
++     *python QuantumKCDemo.v0_2 16*
           will launch with the 16-qubit circuit
-+     *python QuantumRaspberryTie.qk1* _yourprogram.qasm_  
++     *python QuantumKCDemo.v0_2* _yourprogram.qasm_
           will launch and attempt to load the circuit specified in file _yourprogram.qasm_
           
 ## Command line parameters (can be stacked with spaces between them) 

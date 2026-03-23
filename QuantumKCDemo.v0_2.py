@@ -1,5 +1,5 @@
 #----------------------------------------------------------------------
-#     QuantumRaspberryTie.qk2
+#     QuantumKCDemo.v0_2
 #       by KPRoche (Kevin P. Roche) (c) 2017,2018,2019,2020,2021,2022,2024,2025
 #
 #   ============== August 2025 Updates
@@ -26,6 +26,10 @@
 #     Interactive dialog prompt "-int" added to set up parameters
 #       Added to optimize running automatically on Rasqberry Pi System Two
 #
+#     RELEASE 7.1
+#
+#     Update the authentication storage dialog to use the new IBM Quantum Cloud functions
+#       asks for CRN and API Token instead.
 #
 #
 #
@@ -754,61 +758,33 @@ def StartQuantumService():
                 try:
                     Qservice=QiskitRuntimeService()
                 except AccountNotFoundError as e:
-                #    print("IBM Quantum account not found. Please follow the instructions at \r'https://docs.quantum.ibm.com/guides/setup-channel#set-up-to-use-ibm-quantum-platform' \r to store your account credentials")
-                # 
-                #    quit()
-                #except Exception as e:
                     print("Error creating runtime service")
                     print(e)
                     print("This usually means your IBM Quantum account was not found, or your token has expired.")
-                    savetoken=input("Would you like to store your IBM account credentials on this machine? Y/N\n (N)>")
-                    
+                    savetoken=input("Would you like to store your IBM Quantum account credentials on this machine? Y/N\n (N)>")
+                    qchannel = "ibm_quantum_channel"
+                    tokenlist=('You will need your account info:\n'
+                                        'the API Key generated from https://quantum.cloud.ibm.com/,\n'
+                                        'and the Cloud Resource Name (CRN) for your instance also from https://quantum.cloud.ibm.com/')
                     # If answer is yes, gather information:
                     if len(savetoken)>0 and ("y" in savetoken or "Y" in savetoken):
-                        # Account on IBM Quantum or IBM Cloud?
-                        savetoken=input("Is your account on 1) IBM Quantum or 2) IBM Cloud?\n (IBM Quantum)")
-                        if len(savetoken)>0 and ( "2" in savetoken or "loud" in savetoken):
-                            qchannel='ibm_cloud'
-                            tokenlist=('You will need your account,\n'
-                                        'the API Key from https://cloud.ibm.com/iam/apikeys,\n'
-                                        'and the Cloud Resource Name (CRN) from https://cloud.ibm.com/quantum/instances')
-                        else:
-                            qchannel = 'ibm_quantum'
-                            tokenlist=('You will need your IBM Quantum Token from https://quantum.ibm.com/account')
                         print("Setting up ",qchannel,":\n",tokenlist)
-                        # Gather and save info for ibm_quantum channel account
-                        if (qchannel=='ibm_quantum'):
-                            savetoken = input("Enter/Paste your IBM Quantum Token:\n")
-                            if len(savetoken)>0:
-                                QiskitRuntimeService.save_account(
-                                                channel=qchannel,
-                                                token=savetoken,
-                                                set_as_default=True,
-                                                overwrite=True,
-                                            )
-                            else: #data missing, exit gracefully.
-                                print ("No token entered. Please follow the instructions at ")
-                                print("     https://docs.quantum.ibm.com/guides/setup-channel#set-up-to-use-ibm-quantum-platform")
-                                print ("to store your account credentials")
-                                quit()
-                        # Gather and safe info for ibm_cloud channel account
-                        else:  # IBM CLOUD   
-                            cloudID   = input("Enter/Paste your IBM Cloud account:\n")
-                            savetoken = input("Enter/Paste your IBM Cloud API Key:'n")
-                            cloudCRN  = input("Enter/Paste the CRN for your Quantum service instance: \n")
-                            if len(cloudID)>0 and len(savetoken)>0 and len(cloudCRN)>0 : # can only proceed if we have all three
-                                QiskitRuntimeService.save_account(
-                                                channel=qchannel,
-                                                token=savetoken,
-                                                instance=cloudCRN,
-                                                name=cloudID,
-                                                overwrite=True,
-                                            )
-                            else: #data missing, exit gracefully.
-                                print ("Blank/empty credential entered. Please follow the instructions at ")
-                                print("     https://docs.quantum.ibm.com/guides/setup-channel#set-up-to-use-ibm-quantum-platform")
-                                print ("to store your account credentials")
-                                quit()
+                        savetoken = input("Enter/Paste your IBM Quantum API Key: \n")
+                        cloudCRN  = input("Enter/Paste the CRN for your Quantum service instance: \n")
+                        if len(savetoken)>0 and len(cloudCRN)>0 : # can only proceed if we have all three
+                            QiskitRuntimeService.save_account(
+                                            #channel=qchannel,
+                                            token=savetoken,
+                                            instance=cloudCRN,
+                                            #name=cloudID,
+                                            overwrite=True,
+                                            set_as_default=True
+                                        )
+                        else: #data missing, exit gracefully.
+                            print ("Blank/empty credential entered. Please follow the instructions at ")
+                            print("     https://quantum.cloud.ibm.com/docs/en/guides/initialize-account")
+                            print ("to create and store your account credentials")
+                            quit()
                         # -- OK  -- now we are going to try one more time to establish service
                         print("trying to create backend connection with newly saved data")
                         try:
@@ -817,7 +793,7 @@ def StartQuantumService():
                             print("Error creating runtime service with account info you provided:")
                             print(e)   
                             print ("Blank/empty credential entered. Please follow the instructions at ")
-                            print("     https://docs.quantum.ibm.com/guides/setup-channel#set-up-to-use-ibm-quantum-platform")
+                            print("    https://quantum.cloud.ibm.com/docs/en/guides/initialize-account")
                             print ("to store your account credentials")
                             quit()
                          
