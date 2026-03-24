@@ -139,10 +139,13 @@ class QuantumExecutor:
             return None
 
         try:
-            if backend_name == "local":
+            # Backend selection: "aer" and "local" both use qasm_simulator
+            if backend_name in ("local", "aer"):
                 backend = self.Aer.get_backend('qasm_simulator')
             else:
-                # Try to use fake backend for testing
+                # For other backends, try fake backend (limited to 5 qubits)
+                if self.circuit.num_qubits > 5:
+                    raise RuntimeError(f"Circuit has {self.circuit.num_qubits} qubits but fake backend only supports 5 qubits. Use 'aer' or 'local' backend instead.")
                 backend = self.FakeManilaV2()
 
             # Transpile circuit for backend
@@ -161,7 +164,9 @@ class QuantumExecutor:
                 "num_qubits": self.circuit.num_qubits
             }
         except Exception as e:
+            import traceback
             print(f"Execution error: {e}")
+            print(traceback.format_exc())
             return None
 
 
@@ -1071,42 +1076,57 @@ def generate_result_svg(result):
     if not result or "counts" not in result:
         return
 
-    counts = result["counts"]
-    num_qubits = result.get("num_qubits", 5)
+    try:
+        counts = result["counts"]
+        num_qubits = result.get("num_qubits", 5)
 
-    # Find the most common result
-    most_common = max(counts, key=counts.get)
+        # Find the most common result
+        most_common = max(counts, key=counts.get)
 
-    # Create simple HTML with SVG visualization
-    svg_content = f"""
+        # Calculate SVG dimensions based on number of qubits
+        square_size = 25
+        padding = 10
+        squares_per_row = min(20, num_qubits)  # Max 20 squares per row
+        num_rows = (num_qubits + squares_per_row - 1) // squares_per_row
+        svg_width = squares_per_row * (square_size + 5) + 40
+        svg_height = num_rows * (square_size + 5) + 40
+
+        # Create simple HTML with SVG visualization
+        svg_content = f"""
     <!DOCTYPE html>
     <html>
     <head>
         <meta http-equiv="refresh" content="2">
         <style>
             body {{ font-family: Arial, sans-serif; margin: 20px; }}
-            .container {{ max-width: 600px; margin: 0 auto; }}
-            svg {{ border: 1px solid #ccc; margin: 20px 0; }}
+            .container {{ max-width: 800px; margin: 0 auto; }}
+            svg {{ border: 1px solid #ccc; margin: 20px 0; background: white; }}
             .stats {{ background: #f5f5f5; padding: 15px; border-radius: 5px; }}
             .info {{ color: #666; font-size: 12px; margin-top: 10px; }}
         </style>
     </head>
     <body>
         <div class="container">
-            <h2>Quantum Circuit Results</h2>
-            <svg width="400" height="60" viewBox="0 0 400 60">
+            <h2>Quantum Circuit Results ({num_qubits} qubits)</h2>
+            <svg width="{svg_width}" height="{svg_height}" viewBox="0 0 {svg_width} {svg_height}">
                 <!-- Display qubit results as colored squares -->
     """
 
-    # Generate colored squares for each qubit
-    x = 20
-    for i, bit in enumerate(reversed(most_common)):
-        color = "red" if bit == "0" else "blue"
-        svg_content += f'            <rect x="{x}" y="10" width="30" height="30" fill="{color}" stroke="black" stroke-width="1"/>\n'
-        svg_content += f'            <text x="{x + 7}" y="32" font-size="10" fill="white" font-weight="bold">{i}</text>\n'
-        x += 40
+        # Generate colored squares for each qubit
+        x = padding
+        y = padding
+        qubit_idx = 0
+        for i, bit in enumerate(reversed(most_common)):
+            color = "#FF6B6B" if bit == "0" else "#4ECDC4"
+            svg_content += f'            <rect x="{x}" y="{y}" width="{square_size}" height="{square_size}" fill="{color}" stroke="black" stroke-width="1"/>\n'
+            svg_content += f'            <text x="{x + square_size//2}" y="{y + square_size//2 + 4}" font-size="11" text-anchor="middle" fill="white" font-weight="bold">{qubit_idx}</text>\n'
+            x += square_size + 5
+            qubit_idx += 1
+            if qubit_idx % squares_per_row == 0:
+                x = padding
+                y += square_size + 5
 
-    svg_content += """
+        svg_content += """
             </svg>
             <div class="stats">
                 <h3>Most Common Result: """ + most_common + """</h3>
@@ -1114,17 +1134,18 @@ def generate_result_svg(result):
                 <div class="info">
     """
 
-    # Show all results distribution
-    for result_str, count in sorted(counts.items(), key=lambda x: x[1], reverse=True)[:5]:
-        prob = count / sum(counts.values()) * 100
-        svg_content += f"                <div>{result_str}: {count} shots ({prob:.1f}%)</div>\n"
+        # Show all results distribution
+        for result_str, count in sorted(counts.items(), key=lambda x: x[1], reverse=True)[:10]:
+            prob = count / sum(counts.values()) * 100
+            svg_content += f"                <div>{result_str}: {count} shots ({prob:.1f}%)</div>\n"
 
-    svg_content += """
+        svg_content += """
                 </div>
                 <div class="info">
                     Timestamp: """ + result.get("timestamp", "") + """<br>
                     Backend: """ + result.get("backend", "") + """<br>
-                    Total Shots: """ + str(result.get("shots", 10)) + """
+                    Total Shots: """ + str(result.get("shots", 10)) + """<br>
+                    Qubits: """ + str(num_qubits) + """
                 </div>
             </div>
         </div>
@@ -1132,10 +1153,14 @@ def generate_result_svg(result):
     </html>
     """
 
-    # Write to file
-    output_path = SVG_DIR / "pixels.html"
-    with open(output_path, 'w') as f:
-        f.write(svg_content)
+        # Write to file
+        output_path = SVG_DIR / "pixels.html"
+        with open(output_path, 'w') as f:
+            f.write(svg_content)
+    except Exception as e:
+        import traceback
+        print(f"Error generating SVG: {e}")
+        print(traceback.format_exc())
 
 
 # ============================================================================
@@ -1496,15 +1521,19 @@ def _execute_queued_job(job_id):
             raise RuntimeError("Execution returned no result")
 
     except Exception as e:
-        print(f"Error executing job {job_id}: {e}")
+        import traceback
+        error_msg = str(e)
+        tb_msg = traceback.format_exc()
+        print(f"Error executing job {job_id}: {error_msg}")
+        print(tb_msg)
         with job_lock:
             job["status"] = "failed"
             job["completed_at"] = datetime.now().isoformat()
-            job["error"] = str(e)
+            job["error"] = error_msg
 
         with state_lock:
             quantum_state["status"] = "error"
-            quantum_state["message"] = str(e)
+            quantum_state["message"] = error_msg
 
         with metrics_lock:
             metrics["jobs_failed"] += 1
