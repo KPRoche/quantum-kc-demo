@@ -1,18 +1,18 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: quantum-raspberry-tie
+  name: quantum-kc-demo
   labels:
-    app: quantum-raspberry-tie
+    app: quantum-kc-demo
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: quantum-raspberry-tie
+      app: quantum-kc-demo
   template:
     metadata:
       labels:
-        app: quantum-raspberry-tie
+        app: quantum-kc-demo
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "5000"
