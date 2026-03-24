@@ -1441,6 +1441,7 @@ def _execute_queued_job(job_id):
         with state_lock:
             quantum_state["running"] = True
             quantum_state["status"] = "executing"
+            quantum_state["message"] = "Running..."
 
         parameters = job.get("parameters", {})
         qasm_file = parameters.get("qasm_file", "expt.qasm")
