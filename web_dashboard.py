@@ -1,5 +1,5 @@
 """
-Web Dashboard for Quantum Raspberry Tie
+Web Dashboard for Quantum KC Demo
 Provides a browser-based interface for running quantum circuits and viewing results
 """
 
