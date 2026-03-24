@@ -4,6 +4,7 @@ Provides a browser-based interface for running quantum circuits and viewing resu
 """
 
 import os
+import sys
 import json
 import threading
 import time
@@ -1156,11 +1157,19 @@ def generate_result_svg(result):
         # Write to file
         output_path = SVG_DIR / "pixels.html"
         with open(output_path, 'w') as f:
-            f.write(svg_content)
+            bytes_written = f.write(svg_content)
+            f.flush()
+        print(f"SVG written: {output_path}, bytes: {bytes_written}")
     except Exception as e:
         import traceback
-        print(f"Error generating SVG: {e}")
-        print(traceback.format_exc())
+        error_msg = f"Error generating SVG: {e}\n{traceback.format_exc()}"
+        print(error_msg, file=sys.stderr)
+        # Also try to write error to a log file
+        try:
+            with open(SVG_DIR / "error.log", 'a') as f:
+                f.write(error_msg + "\n")
+        except:
+            pass
 
 
 # ============================================================================
