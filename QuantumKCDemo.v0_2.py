@@ -124,6 +124,16 @@ print("       ....time")
 from time import process_time          # used for loop timer
 print("       ....sleep")
 from time import sleep                 #used for delays
+print("       ....quantum_control")
+try:
+    from quantum_control import (
+        initialize_control, wait_for_command, acknowledge_command,
+        command_complete, get_status, CONTROL_DIR
+    )
+    CONTROL_ENABLED = True
+except ImportError:
+    print("       ....(quantum_control module not available - running in CLI mode only)")
+    CONTROL_ENABLED = False
 print("       ....qiskit QiskitRuntimeService")
 from qiskit_ibm_runtime import QiskitRuntimeService, accounts            # classes for accessing IBM Quantum online services
 from qiskit_ibm_runtime.accounts.exceptions import AccountNotFoundError   # to handle missing account info
@@ -840,12 +850,84 @@ def StartQuantumService():
             from qiskit_aer import AerSimulator
             Q = AerSimulator()  #Aer.get_backend('qasm_simulator')
         else:
-            Q = FakeManilaV2() 
+            Q = FakeManilaV2()
 #-------------------------------------------------------------------------------
+
+#==================== PARAMETER PROCESSING FUNCTION ===================================
+# Extract parameter processing into a reusable function so it can be called
+# repeatedly in the outer control loop
+
+def apply_parameters(parameter_list):
+    """
+    Apply a list of command-line style parameters to configure the quantum app.
+    This function resets relevant globals and applies the parameter list.
+
+    Args:
+        parameter_list: List of parameter strings (e.g., ["-b:aer", "-hex"])
+    """
+    global UseLocal, UseNeo, NeoTiled, backendparm, SelectBackend, UseTee, UseHex, UseQ16
+    global UseEmulator, UseFaux, DualDisplay, AddNoise, debug, qasmfileinput, qubits_needed
+
+    # Reset to defaults
+    UseLocal = True
+    UseNeo = True
+    NeoTiled = True
+    backendparm = '[localsim]'
+    SelectBackend = False
+    UseTee = False
+    UseHex = False
+    UseQ16 = False
+    UseEmulator = False
+    UseFaux = False
+    DualDisplay = False
+    AddNoise = False
+    qasmfileinput = 'expt.qasm'
+
+    # Apply parameters from list
+    for p in range(len(parameter_list)):
+        parameter = parameter_list[p]
+        if type(parameter) is str:
+            if 'debug' in parameter: debug = True
+            if ('16' == parameter or "-16" == parameter): qasmfileinput='16'
+            if ('12' == parameter or "-12" == parameter): qasmfileinput='12'
+            if '-local' in parameter: UseLocal = True
+            if '-nois' in parameter:
+                UseLocal = True
+                AddNoise = True
+            if '-noq' in parameter: pass  # QWhileThinking = False
+            if 'bow' in parameter or 'tie' in parameter: UseTee = False
+            if '-tee' in parameter or 'tee' in parameter: UseTee = True
+            if 'hex' in parameter:
+                UseHex = True
+                UseTee = False
+            if 'q16' in parameter:
+                UseQ16 = True
+                UseTee = False
+                UseHex = False
+            if '-e' in parameter: UseEmulator = True
+            if '-faux' in parameter: UseFaux = True
+            if '-dual' in parameter: DualDisplay = True
+            if '-neopixel' in parameter: UseNeo = True
+            if 'notile' in parameter: NeoTiled = False
+            if '-select' in parameter:
+                SelectBackend = True
+                UseLocal = False
+            elif ':' in parameter:
+                token = parameter.split(':')[0]
+                value = parameter.split(':')[1]
+                if '-b' in token:
+                    backendparm = value
+                    UseLocal = False
+                elif '-f' in token:
+                    qasmfileinput = value
+                elif '-nois' in token:
+                    pass  # fake_name = value
+
+#==================== END PARAMETER PROCESSING FUNCTION ============================
 
 ###########################################################################################
 #
-# 					    MAIN PROGRAM 
+# 					    MAIN PROGRAM
 #
 ############################################################################################
     
@@ -1135,9 +1217,17 @@ if UseNeo:
 print("Setting up...")
 # This (hiding deprecation warnings) is temporary because the libraries are changing again
 # comment the next line if you want to see library warnings
-warnings.filterwarnings("ignore", category=DeprecationWarning) 
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-Looping = True    # this will be set false after the first go-round if a real backend is called
+# Initialize control system if available
+if CONTROL_ENABLED:
+    print("Initializing quantum control system...")
+    initialize_control()
+    print(f"Control system ready at: {CONTROL_DIR}")
+
+# In control-enabled mode, don't auto-loop. The control system will request each run.
+# In CLI mode, use the original behavior (loop on simulators).
+Looping = not CONTROL_ENABLED    # Default: loop only if control system is disabled
 angle = 180       # Initial display orientation
 result = None
 runcounter=0
@@ -1150,18 +1240,62 @@ shutdown=False    # used to tell the display thread to trigger a shutdown
 qdone=False
 showlogo=False
 
+# Control loop flag
+outer_control_loop = CONTROL_ENABLED  # If control system is enabled, use the outer loop
+
 # Now call the orient function and show an arrow
 
 if not NoHat and not SenseHatEMU: orient()
 
-display=ibm_qx16    
+display=ibm_qx16
 if not NoHat: hat.set_pixels(Arrow)
-if UseNeo: 
+if UseNeo:
     display_to_LEDs(Arrow, LED_array_indices)
     if DualNEO: display_to_LEDs(Arrow, matrix_map2)
 
 if DualDisplay and not NoHat: hat2.set_pixels(Arrow)
 
+# ====================================================================================
+# OUTER CONTROL LOOP - if control system is enabled, wrap execution in waiting loop
+# ====================================================================================
+if outer_control_loop:
+    print("=" * 80)
+    print("CONTROL MODE ENABLED - waiting for commands from Flask dashboard")
+    print("Control directory:", CONTROL_DIR)
+    print("=" * 80)
+
+while outer_control_loop:
+    # Wait for a command from the control system (Flask app)
+    print("\n[CONTROL] Waiting for command...")
+    cmd = wait_for_command()
+
+    if cmd is None:
+        print("[CONTROL] No command received, continuing...")
+        continue
+
+    if cmd.get("command") == "shutdown":
+        print("[CONTROL] Shutdown command received. Exiting...")
+        shutdown = True
+        break
+
+    if cmd.get("command") == "run":
+        # Got a run command - apply the parameters and execute one circuit
+        print(f"[CONTROL] Run command received: {cmd.get('description', 'no description')}")
+        print(f"[CONTROL] Parameters: {cmd.get('parameters', [])}")
+        acknowledge_command()
+
+        # Apply the parameters from the control command
+        run_parameters = cmd.get("parameters", [])
+        if run_parameters:
+            apply_parameters(run_parameters)
+
+        # Set the local Looping flag to False for single-shot execution
+        Looping = False
+    else:
+        print(f"[CONTROL] Unknown command: {cmd.get('command')}")
+        continue
+
+# [Inner execution block starts here - marked for single-shot execution]
 
 # ------------------------- Step 3:  Find the QASM Input file 
 #
@@ -1366,5 +1500,14 @@ while Looping:
                  break
       if (process_time()-myTimer>interval):       # 10 seconds elapsed -- go now
             goAgain=True
+
+   # Mark the command as complete and return to waiting state
+   if outer_control_loop:
+      print("\n[CONTROL] Circuit execution complete.")
+      command_complete()
+   # If outer_control_loop is True, the while loop continues to wait for next command
+   # If False (CLI mode), break out of the outer loop
+   else:
+      break
 
 print("Program Execution ended normally")

@@ -21,6 +21,17 @@ import numpy as np
 import sys
 sys.path.insert(0, os.path.dirname(__file__))
 
+# Try to import quantum control system
+try:
+    from quantum_control import request_run, get_status as get_control_status, CONTROL_ENABLED
+except ImportError:
+    CONTROL_ENABLED = False
+    def request_run(*args, **kwargs):
+        """Stub if control system unavailable"""
+        return False
+    def get_control_status():
+        return {"status": "unavailable"}
+
 app = Flask(__name__)
 CORS(app)
 
@@ -303,22 +314,77 @@ def index():
 
 @app.route("/api/status")
 def get_status():
-    """Get current quantum state"""
+    """Get current quantum state and control system status"""
     with state_lock:
-        return jsonify(quantum_state)
+        status_response = dict(quantum_state)
+        # Add control system status if available
+        if CONTROL_ENABLED:
+            status_response["control_system"] = get_control_status()
+            status_response["execution_mode"] = "control-based"
+        else:
+            status_response["execution_mode"] = "queue-based"
+        return jsonify(status_response)
 
 
 @app.route("/api/execute", methods=["POST"])
 def execute_circuit():
-    """Execute a quantum circuit (via job queue)"""
+    """Execute a quantum circuit (via control system or job queue)"""
     data = request.json or {}
     qasm_file = data.get("qasm_file", "expt.qasm")
     backend = data.get("backend", "local")
     shots = data.get("shots", 10)
 
-    # Submit to job queue (reuse POST /api/jobs logic)
-    job_id = str(uuid.uuid4())
+    # Build parameters list for quantum app
+    parameters = []
 
+    # Map backend to quantum app parameters
+    if backend and backend != "local":
+        if "aer" in backend.lower():
+            parameters.append("-b:aer")
+        elif "least" in backend.lower():
+            parameters.append("-b:least")
+        else:
+            parameters.append(f"-b:{backend}")
+
+    # Add file parameter if specified
+    if qasm_file and qasm_file != "expt.qasm":
+        parameters.append(f"-f:{qasm_file}")
+
+    job_id = str(uuid.uuid4())
+    description = f"Execute {qasm_file} on {backend} backend"
+
+    # If control system is enabled, send command to quantum process
+    if CONTROL_ENABLED:
+        success = request_run(parameters, description)
+        if success:
+            with job_lock:
+                job_store[job_id] = {
+                    "job_id": job_id,
+                    "status": "submitted_to_quantum",
+                    "parameters": {
+                        "qasm_file": qasm_file,
+                        "backend": backend,
+                        "shots": shots,
+                        "quantum_parameters": parameters
+                    },
+                    "submitted_at": datetime.now().isoformat(),
+                    "started_at": None,
+                    "completed_at": None,
+                    "result": None,
+                    "error": None
+                }
+            return jsonify({
+                "status": "submitted_to_quantum",
+                "job_id": job_id,
+                "description": description
+            }), 202
+        else:
+            return jsonify({
+                "status": "error",
+                "error": "Failed to submit command to quantum process"
+            }), 500
+
+    # Fallback to job queue if control system unavailable
     with job_lock:
         job_store[job_id] = {
             "job_id": job_id,
