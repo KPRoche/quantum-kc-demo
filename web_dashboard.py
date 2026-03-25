@@ -487,7 +487,7 @@ def get_result():
     with state_lock:
         if quantum_state["last_result"]:
             return jsonify(quantum_state["last_result"])
-    return jsonify({"error": "No result available"}), 404
+    return jsonify({"warning": "No result available"}), 200
 
 
 # ============================================================================
@@ -1524,7 +1524,11 @@ def _execute_queued_job(job_id):
                 metrics["jobs_completed"] += 1
 
             # Generate SVG
+            print(f"DEBUG: About to call generate_result_svg with {num_qubits} qubits")
+            sys.stdout.flush()
             generate_result_svg(result)
+            print(f"DEBUG: generate_result_svg completed")
+            sys.stdout.flush()
 
         else:
             raise RuntimeError("Execution returned no result")
