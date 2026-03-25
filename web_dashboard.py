@@ -617,9 +617,38 @@ def get_circuit_diagram():
     if not executor.qiskit_available:
         return jsonify({"error": "Qiskit not available"}), 503
 
+    # In loop mode, refresh the circuit from the current QASM file
+    _refresh_circuit_from_qasm_in_loop_mode()
+
     with state_lock:
         if not executor.circuit:
-            return jsonify({"error": "No circuit loaded"}), 404
+            # Return warning (not error) - normal until execution happens
+            html_content = """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <style>
+                    body { margin: 0; padding: 10px; background: #f0f0f0; font-family: Arial, sans-serif; }
+                    .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                    #circuit-content { margin: 20px 0; padding: 20px; text-align: center; background: #fff8e1; border-left: 4px solid #ffc107; }
+                    .warning { color: #856404; font-size: 14px; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h2>Quantum Circuit Diagram</h2>
+                    <div id="circuit-content">
+                        <div class="warning">⚠ No circuit loaded yet. Run an execution or load a QASM file to display circuit.</div>
+                    </div>
+                </div>
+                <script>
+                    setTimeout(() => { location.reload(); }, 5000);
+                </script>
+            </body>
+            </html>
+            """
+            return html_content, 200, {'Content-Type': 'text/html'}
 
     try:
         # Generate circuit diagram using matplotlib
@@ -676,9 +705,12 @@ def get_circuit_raw():
     if not executor.qiskit_available:
         return jsonify({"error": "Qiskit not available"}), 503
 
+    # In loop mode, refresh the circuit from the current QASM file
+    _refresh_circuit_from_qasm_in_loop_mode()
+
     with state_lock:
         if not executor.circuit:
-            return "circuit not rendered yet", 200, {'Content-Type': 'text/plain'}
+            return "⚠ No circuit loaded yet. Run an execution or load a QASM file to display circuit.", 200, {'Content-Type': 'text/plain'}
 
     try:
         # Generate circuit diagram as ASCII/text art
@@ -694,9 +726,12 @@ def get_circuit_ascii():
     if not executor.qiskit_available:
         return jsonify({"error": "Qiskit not available"}), 503
 
+    # In loop mode, refresh the circuit from the current QASM file
+    _refresh_circuit_from_qasm_in_loop_mode()
+
     with state_lock:
         if not executor.circuit:
-            return "circuit not rendered yet", 200, {'Content-Type': 'text/plain'}
+            return "⚠ No circuit loaded yet. Run an execution or load a QASM file to display circuit.", 200, {'Content-Type': 'text/plain'}
 
     try:
         # Generate circuit diagram as ASCII/text art
@@ -916,6 +951,49 @@ def get_loop_status():
             "status": quantum_state["status"],
             "message": quantum_state.get("message", "")
         })
+
+
+def _refresh_circuit_from_qasm_in_loop_mode():
+    """Helper: In loop mode, reload circuit from the current QASM file"""
+    with state_lock:
+        loop_mode_active = quantum_state["loop_mode"]
+
+    if not loop_mode_active:
+        return  # Not in loop mode, use existing circuit
+
+    try:
+        # Load configuration to find the QASM file
+        config_path = CREDENTIALS_DIR / "config.json"
+        config = {}
+        if config_path.exists():
+            try:
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+            except Exception:
+                pass
+
+        # Get QASM file from config or use default
+        qasm_file = config.get("qasm_file", "expt.qasm")
+
+        # Find and read the QASM file
+        if qasm_file in PRESET_QASM_FILES:
+            qasm_path = Path(__file__).parent / qasm_file
+        else:
+            qasm_path = QASM_DIR / qasm_file
+
+        if not qasm_path.exists():
+            return  # File not found, skip refresh
+
+        # Read and load the circuit
+        with open(qasm_path, 'r') as f:
+            qasm_content = f.read()
+
+        # Load into executor (this updates executor.circuit)
+        executor.load_qasm(qasm_content)
+
+    except Exception as e:
+        # Silently fail, keep existing circuit
+        pass
 
 
 def build_quantum_args():
