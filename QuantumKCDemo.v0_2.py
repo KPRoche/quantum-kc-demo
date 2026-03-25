@@ -458,6 +458,7 @@ def write_svg_file(pixels, label='0000', brighten=1, init=False, force_overwrite
         browser_str= svg_pixels(pixels, brighten) + '\r <br/>Qubit Pattern: ' + label + '<br/><br/>\r'
         svg_file.write(browser_str)
         svg_file.close()  
+        last_pixels = pixels
         #browser_str = 'Qubit Pattern: ' + label + '\r'
         #lbl_file.write(browser_str)
         #lbl_file.close()      
