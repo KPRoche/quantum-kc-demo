@@ -330,6 +330,7 @@ hues = [
 
 # These two lines initialize our working arrays for the display
 pixels = [hsv_to_rgb(h, 1.0, 1.0) for h in hues]
+last_pixels = pixels # making a spare copy for comparision
 qubits = pixels
 
 # scale lets us do a simple color rotation of hues and convert it to RGB in pixels
@@ -423,7 +424,7 @@ def svg_pixels(pixel_list, brighten=1):
 #------------------------------------------------------------------
 #	Write the SVG out as a file
 #------------------------------------------------------------------    
-def write_svg_file(pixels, label='0000', brighten=1, init=False):
+def write_svg_file(pixels, label='0000', brighten=1, init=False, force_overwrite=False):
     # This uses multiple files to create the webpage qubit display:
     # qubits.html is only written if init is True
     #      It contains the refresh command and the html structure, and pulls in the other two
@@ -446,20 +447,20 @@ def write_svg_file(pixels, label='0000', brighten=1, init=False):
         #browser_str = browser_str + '<br> Qubit Pattern: ' + label + '</body></html>'
         html_file.write(browser_str)
         html_file.close()        
-       
-    svg_file = open (r'./svg/pixels.html',"w")
-    #lbl_file = open (r'./svg/pixels.lbl',"w")
-    #browser_str='''<!DOCTYPE html>\r<html>\r<head>\r
-    #                            <title>SenseHat Display</title>\r
-    #                            <meta http-equiv="refresh" content="1">\r
-    #                            </head>\r<body>\r
-    #                            <h3>Latest Display on RPi SenseHat</h3>'''
-    browser_str= svg_pixels(pixels, brighten) + '\r <br/>Qubit Pattern: ' + label + '<br/><br/>\r'
-    svg_file.write(browser_str)
-    svg_file.close()  
-    #browser_str = 'Qubit Pattern: ' + label + '\r'
-    #lbl_file.write(browser_str)
-    #lbl_file.close()      
+    if not(pixels == last_pixels) or init or force_overwrite:      
+        svg_file = open (r'./svg/pixels.html',"w")
+        #lbl_file = open (r'./svg/pixels.lbl',"w")
+        #browser_str='''<!DOCTYPE html>\r<html>\r<head>\r
+        #                            <title>SenseHat Display</title>\r
+        #                            <meta http-equiv="refresh" content="1">\r
+        #                            </head>\r<body>\r
+        #                            <h3>Latest Display on RPi SenseHat</h3>'''
+        browser_str= svg_pixels(pixels, brighten) + '\r <br/>Qubit Pattern: ' + label + '<br/><br/>\r'
+        svg_file.write(browser_str)
+        svg_file.close()  
+        #browser_str = 'Qubit Pattern: ' + label + '\r'
+        #lbl_file.write(browser_str)
+        #lbl_file.close()      
 
 #-- scale lets us scale a fraction of 255
 def scale(v):
