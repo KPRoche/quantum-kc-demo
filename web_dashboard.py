@@ -1578,6 +1578,7 @@ def _execute_queued_job(job_id):
 
         # Execute circuit
         result = executor.execute(backend, shots)
+        num_qubits = executor.QuantumCircuit.num_qubits
 
         if result:
             # Success
