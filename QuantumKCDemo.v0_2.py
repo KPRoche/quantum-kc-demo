@@ -124,6 +124,12 @@ print("       ....time")
 from time import process_time          # used for loop timer
 print("       ....sleep")
 from time import sleep                 #used for delays
+print("       ....json")
+import json                            # used for result file I/O
+print("       ....pathlib")
+from pathlib import Path               # used for result file path
+print("       ....datetime")
+from datetime import datetime          # used for result timestamps
 print("       ....quantum_control")
 try:
     from quantum_control import (
@@ -204,6 +210,16 @@ ibm_qx16 = [[63],[54],[61],[52],[59],[50],[57],[48],
             [7],[14],[5],[12],[3],[10],[1],[8]]
             #[[0],[9],[2],[11],[4],[13],[6],[15],
             #[56],[49],[58],[51],[60],[53],[62],[55]]
+
+ibm_q32x = [[ 0],   [ 2],   [ 4],   [ 6],
+                [ 7],   [11],   [13],   [15],
+            [16],   [18],   [20],   [22],
+                [25],   [27],   [29],   [31],
+            [32],   [34],   [36],   [38],
+                [41],   [43],   [45],   [47],
+            [48],   [50],   [52],   [54],
+                [57],   [59],   [61],   [63]
+            ]
 
 # global to spell OFF in a single operation
 X = [255, 255, 255]  # white
@@ -1367,21 +1383,25 @@ except UnicodeEncodeError:
 except:
     print ('Unable to render quantum circuit drawing for some reason')
     
-if (qubits_needed > 5 and not UseHex) or UseQ16:
+if qubits_needed > 16:
+    display = ibm_q32x
+    maxpattern = '0' * 32
+    print("circuit width: ", qubits_needed, " using 32 qubit display")
+elif (qubits_needed > 5 and not UseHex) or UseQ16:
     display = ibm_qx16
     maxpattern='0000000000000000'
     print ("circuit width: ",qubits_needed," using 16 qubit display")
 else:
-    if (UseTee and qubits_needed <= 5 ): 
+    if (UseTee and qubits_needed <= 5 ):
         display = ibm_qx5t
         maxpattern='00000'
-    elif (UseHex): 
+    elif (UseHex):
         display = ibm_qhex
         maxpattern='000000000000'
-    else: 
+    else:
         display = ibm_qx5
         maxpattern='00000'
-    
+
     print ("circuit width: ",qubits_needed," using 5 qubit display")
 qubitpattern=maxpattern
 
@@ -1479,6 +1499,24 @@ while Looping:
                            if UseLocal:
                                sleep(3)
                            thinking = False  # this cues the display thread to show the qubits in maxpattern
+
+                           # Write result to file for Flask to read during loop mode
+                           try:
+                               RESULT_FILE = Path("/tmp/quantum-control/result.json")
+                               result_data = {
+                                   "pattern": maxpattern,
+                                   "counts": counts,
+                                   "num_qubits": len(maxpattern),
+                                   "shots": sum(counts.values()),
+                                   "timestamp": datetime.now().isoformat(),
+                                   "backend": backendparm,
+                               }
+                               temp = RESULT_FILE.with_suffix(".tmp")
+                               with open(temp, "w") as f:
+                                   json.dump(result_data, f)
+                               temp.replace(RESULT_FILE)
+                           except Exception as e:
+                               print(f"Warning: could not write result file: {e}")
                         if running_timeout :
                             print(backend,' Queue appears to have stalled. Restarting Job.')
                         if running_cancelled :

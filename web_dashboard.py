@@ -78,7 +78,10 @@ CREDENTIALS_DIR = Path(__file__).parent / "credentials"
 CREDENTIALS_DIR.mkdir(exist_ok=True)
 
 # Preset QASM files in project root
-PRESET_QASM_FILES = ["expt.qasm", "expt12.qasm", "expt16.qasm"]
+PRESET_QASM_FILES = ["expt.qasm", "expt12.qasm", "expt16.qasm", "expt32.qasm"]
+
+# Loop mode result file (IPC from subprocess)
+LOOP_RESULT_FILE = Path("/tmp/quantum-control/result.json")
 
 # Global state
 quantum_state = {
@@ -1544,8 +1547,9 @@ def stale_node_reaper():
 
 
 def loop_process_monitor():
-    """Monitor loop process and reset state if it exits unexpectedly"""
+    """Monitor loop process and reset state if it exits unexpectedly. Also poll for result updates."""
     CHECK_INTERVAL = 2
+    last_result_mtime = 0
 
     while True:
         try:
@@ -1557,6 +1561,21 @@ def loop_process_monitor():
                             quantum_state["loop_mode"] = False
                             quantum_state["status"] = "error"
                             quantum_state["message"] = "Loop process exited unexpectedly"
+
+            # Poll result file for new data from loop subprocess
+            if LOOP_RESULT_FILE.exists():
+                mtime = LOOP_RESULT_FILE.stat().st_mtime
+                if mtime > last_result_mtime:
+                    try:
+                        with open(LOOP_RESULT_FILE) as f:
+                            result_data = json.load(f)
+                        with state_lock:
+                            quantum_state["last_result"] = result_data
+                            quantum_state["last_result_time"] = result_data.get("timestamp")
+                        last_result_mtime = mtime
+                    except Exception as e:
+                        print(f"Error reading loop result file: {e}")
+
             time.sleep(CHECK_INTERVAL)
         except Exception as e:
             print(f"Error in loop_process_monitor: {e}")
