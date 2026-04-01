@@ -66,7 +66,8 @@ EXPOSE 5000
 ENV QUANTUM_DISPLAY_MODE=svg \
     QUANTUM_BACKEND=local \
     QUANTUM_QUBITS=5 \
-    FLASK_ENV=production
+    FLASK_ENV=production \
+    APP_VERSION=v0.2.9
 
 # Run both services
 ENTRYPOINT ["/app/entrypoint.sh"]

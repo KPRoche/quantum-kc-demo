@@ -37,6 +37,29 @@ app = Flask(__name__)
 CORS(app)
 
 
+def get_version_info():
+    """Get version information from git or environment"""
+    version = os.environ.get("APP_VERSION", "unknown")
+    commit = "unknown"
+
+    # Try to get git commit hash
+    try:
+        commit = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=os.path.dirname(__file__),
+            stderr=subprocess.DEVNULL,
+            text=True
+        ).strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+
+    return {
+        "version": version,
+        "commit": commit,
+        "timestamp": datetime.now().isoformat()
+    }
+
+
 @app.before_request
 def track_http_request():
     """Track HTTP requests for Prometheus metrics (exclude probes)"""
@@ -282,6 +305,7 @@ def list_endpoints():
             {"path": "/", "method": "GET", "description": "Serve main dashboard page"},
             {"path": "/api/status", "method": "GET", "description": "Get current quantum state"},
             {"path": "/api/result", "method": "GET", "description": "Get last execution result"},
+            {"path": "/api/version", "method": "GET", "description": "Get version and commit information"},
             {"path": "/api/endpoints", "method": "GET", "description": "Get all available endpoints (this endpoint)"}
         ],
         "execution": [
@@ -335,6 +359,12 @@ def list_endpoints():
         "timestamp": datetime.now().isoformat(),
         "total_endpoints": sum(len(v) for v in endpoints.values())
     }), 200
+
+
+@app.route("/api/version")
+def get_version():
+    """Get version information"""
+    return jsonify(get_version_info()), 200
 
 
 @app.route("/")
