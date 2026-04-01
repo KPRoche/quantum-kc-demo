@@ -330,7 +330,8 @@ def list_endpoints():
             {"path": "/api/qasm/circuit/ascii", "method": "GET", "description": "Get circuit diagram as ASCII art text drawing (same as /circuit/raw)"}
         ],
         "qubit_measurement": [
-            {"path": "/api/qubits", "method": "GET", "description": "Get the latest qubit measurement as string and structured data"}
+            {"path": "/api/qubits", "method": "GET", "description": "Get the latest qubit measurement as string and structured data"},
+            {"path": "/api/qubits/simple", "method": "GET", "description": "Get the latest qubit measurement (lightweight: pattern, num_qubits, timestamp, shots)"}
         ],
         "configuration": [
             {"path": "/api/config", "method": "GET/POST", "description": "Get or set configuration"},
