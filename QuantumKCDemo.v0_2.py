@@ -330,7 +330,7 @@ hues = [
 
 # These two lines initialize our working arrays for the display
 pixels = [hsv_to_rgb(h, 1.0, 1.0) for h in hues]
-last_pixels = pixels # making a spare copy for comparision
+last_pixels = pixels[:] # making a spare copy for comparision
 qubits = pixels
 
 # scale lets us do a simple color rotation of hues and convert it to RGB in pixels
@@ -425,6 +425,7 @@ def svg_pixels(pixel_list, brighten=1):
 #	Write the SVG out as a file
 #------------------------------------------------------------------    
 def write_svg_file(pixels, label='0000', brighten=1, init=False, force_overwrite=False):
+    global last_pixels
     # This uses multiple files to create the webpage qubit display:
     # qubits.html is only written if init is True
     #      It contains the refresh command and the html structure, and pulls in the other two
