@@ -248,6 +248,31 @@ def get_qubits():
         "shots": result.get("shots")
     }), 200
 
+@app.route("/api/qubits/simple")
+def get_qubits_simple():
+    """Get the latest qubit measurement as a string and structured data"""
+    with state_lock:
+        if not quantum_state["last_result"]:
+            return jsonify({"error": "No measurement available yet"}), 404
+
+        result = quantum_state["last_result"]
+        counts = result.get("counts", {})
+
+    if not counts:
+        return jsonify({"error": "No measurement data available"}), 404
+
+    # Get most common pattern (same logic as SVG generation)
+    pattern = max(counts, key=counts.get)
+    num_qubits = len(pattern)
+
+    return jsonify({
+        "pattern": pattern,
+        "num_qubits": num_qubits,
+        "timestamp": quantum_state.get("last_result_time"),
+        "shots": result.get("shots")
+    }), 200
+
+
 
 @app.route("/api/endpoints")
 def list_endpoints():

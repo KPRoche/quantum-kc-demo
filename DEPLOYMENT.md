@@ -34,7 +34,7 @@ This guide covers deploying Quantum Raspberry Tie on non-Raspberry Pi hardware (
 ### Building the Image Manually
 
 ```bash
-docker build -t quantum-tie:v0.2.5 .
+docker build -t quantum-tie:v0.2.9 .
 ```
 
 ### Running Without Docker Compose
@@ -44,7 +44,7 @@ docker run -it --rm \
   -p 5000:5000 \
   -v $(pwd)/svg:/app/svg \
   -v $(pwd)/credentials:/app/credentials \
-  quantum-tie:v0.2.5
+  quantum-tie:v0.2.9
 ```
 
 ### Container Environment Variables

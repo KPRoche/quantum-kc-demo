@@ -11,6 +11,13 @@
 | `/api/status` | GET | Get current quantum state | JSON state object |
 | `/api/result` | GET | Get last execution result | JSON result data |
 
+## Qubit Measurement Endpoints
+
+| Endpoint | Method | Purpose | Response |
+|----------|--------|---------|----------|
+| `/api/qubits` | GET | Get full qubit measurement data | `{pattern, qubits, num_qubits, backend, shots, timestamp}` |
+| `/api/qubits/simple` | GET | Get simplified qubit measurement | `{pattern, num_qubits, shots, timestamp}` |
+
 ## Execution Endpoints
 
 | Endpoint | Method | Purpose | Payload |
