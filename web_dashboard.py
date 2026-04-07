@@ -76,6 +76,8 @@ SVG_DIR = FILES_DIR / "svg"
 SVG_DIR.mkdir(exist_ok=True)
 QASM_DIR = FILES_DIR / "qasm"
 QASM_DIR.mkdir(exist_ok=True)
+CONTROL_DIR = FILES_DIR / "control"
+CONTROL_DIR.mkdir(exist_ok=True)
 CREDENTIALS_DIR = Path(__file__).parent / "credentials"
 CREDENTIALS_DIR.mkdir(exist_ok=True)
 
@@ -422,6 +424,14 @@ def execute_circuit():
 
     # If control system is enabled, send command to quantum process
     if CONTROL_ENABLED:
+        # Write config.json with qasm_file so subprocess can read it (as fallback)
+        config_path = FILES_DIR / "control" / "config.json"
+        try:
+            with open(config_path, 'w') as f:
+                json.dump({"qasm_file": qasm_file}, f)
+        except Exception as e:
+            print(f"Warning: Could not write config.json: {e}")
+
         success = request_run(parameters, description)
         if success:
             with job_lock:

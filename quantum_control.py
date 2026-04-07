@@ -215,3 +215,7 @@ if __name__ == "__main__":
     print("Completing command...")
     command_complete()
     print("Status after complete:", get_status())
+
+
+# Control system is available when this module can be imported
+CONTROL_ENABLED = True

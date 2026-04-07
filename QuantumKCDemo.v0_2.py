@@ -758,7 +758,7 @@ def StartQuantumService():
             UseLocal = True
             from qiskit_aer import AerSimulator
             print("creating basic Aer Simulator")
-            Q = AerSimulator()    
+            Q = AerSimulator(n_qubits=qubits_needed)    
     elif not UseLocal and 'aer' in backendparm:
         if 'mod' in backendparm or 'nois' in backendparm:
             UseLocal = False
@@ -767,7 +767,7 @@ def StartQuantumService():
             UseLocal = True
             from qiskit_aer import AerSimulator
             print("creating basic Aer Simulator")
-            Q = AerSimulator()    
+            Q = AerSimulator(n_qubits=qubits_needed)    
             
     if not UseLocal:
             
@@ -845,7 +845,7 @@ def StartQuantumService():
                         Q = AerSimulator.from_backend(real_backend)
                     else:
                         print("creating basic Aer Simulator")
-                        Q = AerSimulator()    
+                        Q = AerSimulator(n_qubits=qubits_needed)    
                     UseLocal=True  #now that it's built, mark the backend as local
                 else:
                     try:
@@ -868,7 +868,7 @@ def StartQuantumService():
         print ("Building ",backend, "with requested attributes...")
         if not AddNoise:
             from qiskit_aer import AerSimulator
-            Q = AerSimulator()  #Aer.get_backend('qasm_simulator')
+            Q = AerSimulator(n_qubits=qubits_needed)  #Aer.get_backend('qasm_simulator')
         else:
             Q = FakeManilaV2()
 #-------------------------------------------------------------------------------
