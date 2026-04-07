@@ -38,6 +38,7 @@ RUN pip install --no-cache /wheels/* && rm -rf /wheels
 
 # Copy application files
 COPY QuantumKCDemo.v0_2.py qapp.py
+COPY quantum_control.py quantum_control.py
 COPY expt.qasm expt.qasm
 COPY expt12.qasm expt12.qasm
 COPY expt16.qasm expt16.qasm
@@ -46,7 +47,7 @@ COPY web_dashboard.py web_dashboard.py
 COPY templates/ templates/
 
 # Create directories for outputs
-RUN mkdir -p /app/svg /app/credentials
+RUN mkdir -p /app/files/svg /app/files/control /app/files/qasm /app/credentials
 
 # Install bash for entrypoint script (before switching to non-root user)
 RUN apt-get update && apt-get install -y --no-install-recommends bash && rm -rf /var/lib/apt/lists/*
@@ -68,7 +69,7 @@ ENV QUANTUM_DISPLAY_MODE=svg \
     QUANTUM_BACKEND=local \
     QUANTUM_QUBITS=5 \
     FLASK_ENV=production \
-    APP_VERSION=v0.2.10
+    APP_VERSION=v0.2.12
 
 # Run both services
 ENTRYPOINT ["/app/entrypoint.sh"]

@@ -20,8 +20,8 @@ spec:
     spec:
       containers:
       - name: quantum-tie
-        image: ghcr.io/kproche/quantum-kc-demo:latest
-        imagePullPolicy: IfNotPresent
+        image: ghcr.io/kproche/quantum-kc-demo:v0.2.12
+        imagePullPolicy: Always
         ports:
         - containerPort: 5000
           name: http
@@ -65,7 +65,7 @@ spec:
         - name: credentials
           mountPath: /app/credentials
         - name: svg-output
-          mountPath: /app/svg
+          mountPath: /app/files/svg
       volumes:
       - name: credentials
         secret:

@@ -70,9 +70,11 @@ def track_http_request():
             metrics["http_requests"][key] = metrics["http_requests"].get(key, 0) + 1
 
 # Configuration
-SVG_DIR = Path(__file__).parent / "svg"
+FILES_DIR = Path(__file__).parent / "files"
+FILES_DIR.mkdir(exist_ok=True)
+SVG_DIR = FILES_DIR / "svg"
 SVG_DIR.mkdir(exist_ok=True)
-QASM_DIR = Path(__file__).parent / "qasm"
+QASM_DIR = FILES_DIR / "qasm"
 QASM_DIR.mkdir(exist_ok=True)
 CREDENTIALS_DIR = Path(__file__).parent / "credentials"
 CREDENTIALS_DIR.mkdir(exist_ok=True)
@@ -81,7 +83,7 @@ CREDENTIALS_DIR.mkdir(exist_ok=True)
 PRESET_QASM_FILES = ["expt.qasm", "expt12.qasm", "expt16.qasm", "expt32.qasm"]
 
 # Loop mode result file (IPC from subprocess)
-LOOP_RESULT_FILE = Path("/tmp/quantum-control/result.json")
+LOOP_RESULT_FILE = FILES_DIR / "control" / "result.json"
 
 # Global state
 quantum_state = {
@@ -803,19 +805,25 @@ def get_circuit_ascii():
 @app.route("/api/config", methods=["GET", "POST"])
 def config():
     """Get or set configuration"""
-    if request.method == "POST":
-        data = request.json or {}
-        # Store configuration
-        config_path = CREDENTIALS_DIR / "config.json"
-        with open(config_path, 'w') as f:
-            json.dump(data, f, indent=2)
-        return jsonify({"status": "saved"})
-    else:
-        config_path = CREDENTIALS_DIR / "config.json"
-        if config_path.exists():
-            with open(config_path, 'r') as f:
-                return jsonify(json.load(f))
-        return jsonify({})
+    try:
+        if request.method == "POST":
+            data = request.json or {}
+            # Store configuration in writable files dir
+            config_path = FILES_DIR / "control" / "config.json"
+            with open(config_path, 'w') as f:
+                json.dump(data, f, indent=2)
+            return jsonify({"status": "saved"})
+        else:
+            config_path = FILES_DIR / "control" / "config.json"
+            if config_path.exists():
+                with open(config_path, 'r') as f:
+                    return jsonify(json.load(f))
+            return jsonify({})
+    except Exception as e:
+        import traceback
+        print(f"Config error: {e}", flush=True)
+        print(traceback.format_exc(), flush=True)
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/auth/save", methods=["POST"])
@@ -1022,7 +1030,7 @@ def _refresh_circuit_from_qasm_in_loop_mode():
 
     try:
         # Load configuration to find the QASM file
-        config_path = CREDENTIALS_DIR / "config.json"
+        config_path = FILES_DIR / "control" / "config.json"
         config = {}
         if config_path.exists():
             try:
@@ -1060,7 +1068,7 @@ def build_quantum_args():
     args = []
 
     # Load configuration
-    config_path = CREDENTIALS_DIR / "config.json"
+    config_path = FILES_DIR / "control" / "config.json"
     config = {}
     if config_path.exists():
         try:
@@ -1121,9 +1129,21 @@ def start_loop_mode():
     """Start continuous loop mode"""
     global loop_process
 
+    # Log entry
+    try:
+        with open(FILES_DIR / "debug.log", "a") as f:
+            f.write(f"[{datetime.now().isoformat()}] start_loop_mode() called\n")
+    except:
+        pass
+
     # Check loop_mode under state_lock first
     with state_lock:
         if quantum_state["loop_mode"]:
+            try:
+                with open(FILES_DIR / "debug.log", "a") as f:
+                    f.write(f"  - Loop already running, returning 409\n")
+            except:
+                pass
             return jsonify({"error": "Loop mode already running"}), 409
         quantum_state["status"] = "starting_loop"
         quantum_state["message"] = "Starting loop mode..."
@@ -1131,6 +1151,10 @@ def start_loop_mode():
     # Acquire loop_lock before spawning subprocess
     with loop_lock:
         try:
+            # Ensure /app/files/control directory exists for IPC
+            control_dir = FILES_DIR / "control"
+            control_dir.mkdir(exist_ok=True, mode=0o777)
+
             # Start the quantum program with loop mode
             # Try qapp.py first (standard name in container), then QuantumKCDemo.v0_2.py (development)
             app_path = Path(__file__).parent / "qapp.py"
@@ -1139,19 +1163,34 @@ def start_loop_mode():
 
             # Build arguments from saved configuration
             cmd_args = ["python3", str(app_path)]
-            cmd_args.extend(build_quantum_args())
+            custom_args = build_quantum_args()
+            # Add -loop flag to run in pure loop mode (bypasses control system)
+            custom_args.append("-loop")
+            debug_log = FILES_DIR / "debug.log"
+            with open(debug_log, "a") as f:
+                f.write(f"Custom args from build_quantum_args: {custom_args}\n")
+            cmd_args.extend(custom_args)
 
             # Set up environment to ensure SVG output goes to the Flask svg directory
             env = os.environ.copy()
             env["SVG_OUTPUT_DIR"] = str(SVG_DIR)
+            env["QUANTUM_FILES_DIR"] = str(FILES_DIR)
+
+            with open(debug_log, "a") as f:
+                f.write(f"Starting loop process with args: {cmd_args}\n")
+                f.write(f"SVG_OUTPUT_DIR set to: {SVG_DIR}\n")
+                f.write(f"App path exists: {app_path.exists()}\n")
 
             loop_process = subprocess.Popen(
                 cmd_args,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
                 text=True,
                 env=env
             )
+
+            with open(debug_log, "a") as f:
+                f.write(f"Loop process started with PID: {loop_process.pid}\n")
 
             # Set loop_mode = True only after Popen succeeds
             with state_lock:
@@ -1162,9 +1201,18 @@ def start_loop_mode():
             return jsonify({"status": "loop_started", "message": "Quantum program running in loop mode"})
 
         except Exception as e:
+            import traceback
+            import sys
+            error_msg = f"Failed to start loop mode: {str(e)}\n{traceback.format_exc()}"
+            print(error_msg, file=sys.stderr, flush=True)
+            try:
+                with open(FILES_DIR / "debug.log", "a") as f:
+                    f.write(f"EXCEPTION: {error_msg}\n")
+            except:
+                pass
             with state_lock:
                 quantum_state["status"] = "error"
-                quantum_state["message"] = f"Failed to start loop mode: {str(e)}"
+                quantum_state["message"] = error_msg
             loop_process = None
             return jsonify({"error": str(e)}), 500
 
@@ -1557,11 +1605,15 @@ def loop_process_monitor():
             with loop_lock:
                 if loop_process and loop_process.poll() is not None:
                     # Process has exited
+                    exit_code = loop_process.returncode
+                    import sys
+                    print(f"Loop process exited with code: {exit_code}", file=sys.stderr, flush=True)
+
                     with state_lock:
                         if quantum_state["loop_mode"]:
                             quantum_state["loop_mode"] = False
                             quantum_state["status"] = "error"
-                            quantum_state["message"] = "Loop process exited unexpectedly"
+                            quantum_state["message"] = f"Loop process exited with code {exit_code}"
 
             # Poll result file for new data from loop subprocess
             if LOOP_RESULT_FILE.exists():

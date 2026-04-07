@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 
 # Control file location
-CONTROL_DIR = Path("/tmp/quantum-control")
+CONTROL_DIR = Path("/app/files/control")
 CONTROL_FILE = CONTROL_DIR / "command.json"
 CONTROL_LOCK_FILE = CONTROL_DIR / ".lock"
 

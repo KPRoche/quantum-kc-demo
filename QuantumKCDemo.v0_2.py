@@ -447,13 +447,14 @@ def write_svg_file(pixels, label='0000', brighten=1, init=False, force_overwrite
     #      It contains the refresh command and the html structure, and pulls in the other two
     # pixels.svg holds the display pattern
     # pixels.lbl holds the caption
+    _svg_dir = os.environ.get("SVG_OUTPUT_DIR", "./svg")
     if init:
         print("initializing html wrapper for svg display")
         try: #create the svg directory if it doesn't exist yet
-            os.mkdir(r'./svg')
+            os.makedirs(_svg_dir, exist_ok=True)
         except OSError as error:
             print(error)
-        html_file = open (r'./svg/qubits.html',"w")
+        html_file = open (os.path.join(_svg_dir, 'qubits.html'),"w")
         browser_str='''<!DOCTYPE html>\r<html>\r<head>\r
                                 <title>SenseHat Display</title>\r
                                 <meta http-equiv="refresh" content="2.5">\r
@@ -464,9 +465,9 @@ def write_svg_file(pixels, label='0000', brighten=1, init=False, force_overwrite
         #browser_str = browser_str + '<br> Qubit Pattern: ' + label + '</body></html>'
         html_file.write(browser_str)
         html_file.close()        
-    if not(pixels == last_pixels) or init or force_overwrite:      
-        svg_file = open (r'./svg/pixels.html',"w")
-        #lbl_file = open (r'./svg/pixels.lbl',"w")
+    if not(pixels == last_pixels) or init or force_overwrite:
+        svg_file = open (os.path.join(_svg_dir, 'pixels.html'),"w")
+        #lbl_file = open (os.path.join(_svg_dir, 'pixels.lbl'),"w")
         #browser_str='''<!DOCTYPE html>\r<html>\r<head>\r
         #                            <title>SenseHat Display</title>\r
         #                            <meta http-equiv="refresh" content="1">\r
@@ -885,7 +886,7 @@ def apply_parameters(parameter_list):
         parameter_list: List of parameter strings (e.g., ["-b:aer", "-hex"])
     """
     global UseLocal, UseNeo, NeoTiled, backendparm, SelectBackend, UseTee, UseHex, UseQ16
-    global UseEmulator, UseFaux, DualDisplay, AddNoise, debug, qasmfileinput, qubits_needed
+    global UseEmulator, UseFaux, DualDisplay, AddNoise, debug, qasmfileinput, qubits_needed, LoopModeFlag
 
     # Reset to defaults
     UseLocal = True
@@ -928,6 +929,7 @@ def apply_parameters(parameter_list):
             if '-dual' in parameter: DualDisplay = True
             if '-neopixel' in parameter: UseNeo = True
             if 'notile' in parameter: NeoTiled = False
+            if '-loop' in parameter: LoopModeFlag = True
             if '-select' in parameter:
                 SelectBackend = True
                 UseLocal = False
@@ -1247,6 +1249,7 @@ if CONTROL_ENABLED:
 # In control-enabled mode, don't auto-loop. The control system will request each run.
 # In CLI mode, use the original behavior (loop on simulators).
 Looping = not CONTROL_ENABLED    # Default: loop only if control system is disabled
+LoopModeFlag = False             # Flag for subprocess to run in pure loop mode (set by -loop flag)
 angle = 180       # Initial display orientation
 result = None
 runcounter=0
@@ -1284,6 +1287,11 @@ if outer_control_loop:
     print("=" * 80)
 
 while outer_control_loop:
+    # If -loop flag was set, skip control mode and go directly to looping
+    if LoopModeFlag:
+        print("\n[LOOP] Loop mode flag detected, exiting control loop for continuous loop mode")
+        break
+
     # Wait for a command from the control system (Flask app)
     print("\n[CONTROL] Waiting for command...")
     cmd = wait_for_command()
@@ -1308,6 +1316,19 @@ while outer_control_loop:
         if run_parameters:
             apply_parameters(run_parameters)
 
+        # Re-read config.json to pick up QASM file change (overrides apply_parameters default)
+        try:
+            _config_path = Path(os.environ.get("QUANTUM_FILES_DIR", "/app/files")) / "control" / "config.json"
+            if _config_path.exists():
+                with open(_config_path, 'r') as _f:
+                    _fresh_config = json.load(_f)
+                _new_qasm = _fresh_config.get("qasm_file")
+                if _new_qasm:
+                    qasmfileinput = _new_qasm
+                    print(f"[CONTROL] Using QASM file from config: {_new_qasm}")
+        except Exception as _e:
+            print(f"[CONTROL] Warning: could not re-read config qasm_file: {_e}")
+
         # Set the local Looping flag to False for single-shot execution
         Looping = False
     else:
@@ -1322,7 +1343,7 @@ while outer_control_loop:
 #       use a couple tricks to make sure it is there
 #       if not fall back on our default file
 
-scriptfolder = os.path.dirname(os.path.realpath("__file__"))
+scriptfolder = os.path.dirname(os.path.realpath(__file__))
 if ('16' in  qasmfileinput):    qasmfilename='expt16.qasm' 
 elif ('12' in qasmfileinput):    qasmfilename='expt12.qasm' 
 else: qasmfilename = qasmfileinput
@@ -1411,6 +1432,20 @@ rainbowTie.start()                          # start the display thread
 
 while Looping:
    runcounter += 1
+
+   # Re-read config.json each iteration to pick up QASM file changes
+   try:
+       _config_path = Path(os.environ.get("QUANTUM_FILES_DIR", "/app/files")) / "control" / "config.json"
+       if _config_path.exists():
+           with open(_config_path, 'r') as _f:
+               _fresh_config = json.load(_f)
+           _new_qasm = _fresh_config.get("qasm_file")
+           if _new_qasm:
+               qasmfileinput = _new_qasm
+               print(f"[LOOP] Using QASM file from config: {_new_qasm}")
+   except Exception as _e:
+       print(f"[LOOP] Warning: could not re-read config qasm_file: {_e}")
+
    if "aer" in backendparm: UseLocal=True
    try:
        if not UseLocal:
@@ -1502,7 +1537,7 @@ while Looping:
 
                            # Write result to file for Flask to read during loop mode
                            try:
-                               RESULT_FILE = Path("/tmp/quantum-control/result.json")
+                               RESULT_FILE = Path(os.environ.get("QUANTUM_FILES_DIR", "/app/files")) / "control" / "result.json"
                                result_data = {
                                    "pattern": maxpattern,
                                    "counts": counts,
