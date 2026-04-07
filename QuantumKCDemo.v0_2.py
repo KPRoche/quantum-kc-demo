@@ -1228,10 +1228,6 @@ else:
             else:
                 SenseHatEMU = True
 
-if UseNeo:
-    if NeoTiled:    LED_array_indices = RQ2_array_indices
-    else:           LED_array_indices = matrix_map
-
 
 # Initial some more working variables and settings we are going to need 
 
@@ -1342,6 +1338,11 @@ while outer_control_loop:
 # 		find our experiment file... alternate can be specified on command line
 #       use a couple tricks to make sure it is there
 #       if not fall back on our default file
+
+    # Set up LED array indices for this execution
+    if UseNeo:
+        if NeoTiled:    LED_array_indices = RQ2_array_indices
+        else:           LED_array_indices = matrix_map
 
     scriptfolder = os.path.dirname(os.path.realpath(__file__))
     if ('16' in  qasmfileinput):    qasmfilename='expt16.qasm' 
