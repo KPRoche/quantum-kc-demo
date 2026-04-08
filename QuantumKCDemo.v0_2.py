@@ -409,6 +409,9 @@ matrix_map2 = create_matrix_map(8, 16)
 # Initialize LED_array_indices (will be set properly in execution block)
 LED_array_indices = matrix_map
 
+# Initialize neopixel_array to None (will be set if hardware is available)
+neopixel_array = None
+
 #----------------------------------------------------------------------------
 #       Create a SVG rendition of the pixel array
 #----------------------------------------------------------------------------
@@ -559,7 +562,7 @@ def orient():
 
 # -- showqubits maps a bit pattern (a string of up to 16 0s and 1s) onto the current display template
 def showqubits(pattern='0000000000000000'):
-   global hat, qubits, LED_array_indices
+   global hat, qubits, LED_array_indices, UseNeo, neopixel_array
    padding=''
    svgpattern=pattern
    if len(pattern)<len(display):
@@ -581,10 +584,10 @@ def showqubits(pattern='0000000000000000'):
    qubits=pixels
    qubitpattern=pattern
 
-   # Test for LED array
-   if UseNeo:
+   # Test for LED array (only if hardware is available)
+   if UseNeo and neopixel_array is not None:
     #neopixel_array.clear()
-    #neopixel_array.show()   
+    #neopixel_array.show()
     display_to_LEDs(pixels, LED_array_indices)
     if DualNEO and not NeoTiled: display_to_LEDs(pixels, matrix_map2)
 
@@ -637,13 +640,13 @@ def blinky(time=20,experimentID=''):
       if not showlogo:
           if not NoHat: hat.set_pixels(pixels)
           if DualDisplay and not NoHat: hat2.set_pixels(pixels)
-          if UseNeo: 
+          if UseNeo and neopixel_array is not None:
             display_to_LEDs(pixels, LED_array_indices)
             if DualNEO and not NeoTiled: display_to_LEDs(pixels, matrix_map2)
       else:
           if not NoHat: hat.set_pixels(QKLogo)
           if DualDisplay and not NoHat: hat2.set_pixels(QKLogo)
-          if UseNeo: 
+          if UseNeo and neopixel_array is not None:
             display_to_LEDs(QKLogo, LED_array_indices)
             if DualNEO and not NeoTiled: display_to_LEDs(pixels, matrix_map2)
       sleep(0.002)
@@ -660,7 +663,7 @@ def blinky(time=20,experimentID=''):
 #    build a class glow so we can launch display control as a thread
 #------------------------------------------------
 class glow():
-   global thinking,hat, maxpattern, shutdown,off,Qlogo, QArcs, Qhex, LED_array_indices
+   global thinking,hat, maxpattern, shutdown,off,Qlogo, QArcs, Qhex, LED_array_indices, UseNeo, neopixel_array
 
    def __init__(self):
       self._running = True
@@ -1269,7 +1272,7 @@ if not NoHat and not SenseHatEMU: orient()
 
 display=ibm_qx16
 if not NoHat: hat.set_pixels(Arrow)
-if UseNeo:
+if UseNeo and neopixel_array is not None:
     display_to_LEDs(Arrow, LED_array_indices)
     if DualNEO: display_to_LEDs(Arrow, matrix_map2)
 
