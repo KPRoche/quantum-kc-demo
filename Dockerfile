@@ -39,10 +39,10 @@ RUN pip install --no-cache /wheels/* && rm -rf /wheels
 # Copy application files
 COPY QuantumKCDemo.v0_2.py qapp.py
 COPY quantum_control.py quantum_control.py
-COPY expt.qasm expt.qasm
-COPY expt12.qasm expt12.qasm
-COPY expt16.qasm expt16.qasm
-COPY expt32.qasm expt32.qasm
+#COPY expt.qasm expt.qasm
+#COPY expt12.qasm expt12.qasm
+#COPY expt16.qasm expt16.qasm
+#COPY expt32.qasm expt32.qasm
 COPY web_dashboard.py web_dashboard.py
 COPY templates/ templates/
 COPY files/ /app/files/
