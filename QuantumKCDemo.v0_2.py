@@ -1530,20 +1530,22 @@ while outer_control_loop:
                                 if not qdone: running_start+=1;
                             
                             print(f"[DEBUG] Job done status: {qjob.done()}, final_state: {qjob.in_final_state()}, cancelled: {qjob.cancelled()}")
-                            if qjob.done() :
-                               # only get here once we get DONE status
+
+                            # Process results regardless of job.done() status - the job completed from the waiting loop
+                            try:
                                result=qjob.result()     # get the result
                                counts=result.get_counts(qcirc)
                                maxpattern=max(counts,key=counts.get)
                                qubitpattern=maxpattern
                                maxvalue=counts[maxpattern]
                                print("Maximum value:",maxvalue, "Maximum pattern:",maxpattern)
-                               print("[DEBUG] About to write result file...")
+
                                if UseLocal:
                                    sleep(3)
                                thinking = False  # this cues the display thread to show the qubits in maxpattern
-    
+
                                # Write result to file for Flask to read during loop mode
+                               print("[DEBUG] About to write result file...")
                                try:
                                    RESULT_FILE = Path(os.environ.get("QUANTUM_FILES_DIR", "/app/files")) / "control" / "result.json"
                                    result_data = {
@@ -1561,6 +1563,8 @@ while outer_control_loop:
                                    print(f"[RESULT] Written to {RESULT_FILE}")
                                except Exception as e:
                                    print(f"[ERROR] Could not write result file: {e}")
+                            except Exception as e:
+                               print(f"[ERROR] Failed to process results: {e}")
                             if running_timeout :
                                 print(backend,' Queue appears to have stalled. Restarting Job.')
                             if running_cancelled :
