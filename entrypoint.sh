@@ -22,7 +22,7 @@ sleep 2
 
 echo "Starting quantum program (control-enabled, waits for commands)..."
 # Run quantum program in foreground - it will wait for commands from Flask
-python qapp.py -b:aer -hex
+python -u qapp.py -b:aer -hex
 
 # If quantum program exits, clean up Flask
 echo "Quantum program ended. Cleaning up..."
