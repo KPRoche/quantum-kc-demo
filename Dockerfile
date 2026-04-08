@@ -70,7 +70,10 @@ ENV QUANTUM_DISPLAY_MODE=svg \
     QUANTUM_BACKEND=local \
     QUANTUM_QUBITS=5 \
     FLASK_ENV=production \
-    APP_VERSION=v0.2.25
+    APP_VERSION=v0.2.26 \
+    SVG_OUTPUT_DIR=/app/files/svg \
+    QASM_DIR=/app/files/qasm \
+    CONTROL_DIR=/app/files/control
 
 # Run both services
 ENTRYPOINT ["/app/entrypoint.sh"]

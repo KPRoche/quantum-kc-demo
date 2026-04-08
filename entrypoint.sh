@@ -7,6 +7,11 @@ set -e
 echo "Starting Quantum KC Demo Services..."
 echo ""
 
+# Set environment variables for file locations
+export SVG_OUTPUT_DIR="/app/files/svg"
+export QASM_DIR="/app/files/qasm"
+export CONTROL_DIR="/app/files/control"
+
 # Start Flask in the background so quantum process can communicate with it
 echo "Starting Flask web dashboard (background)..."
 python web_dashboard.py &
