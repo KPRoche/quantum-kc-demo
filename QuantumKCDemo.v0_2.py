@@ -1529,14 +1529,16 @@ while outer_control_loop:
                                     print(running_start,qjob.job_id(),"Job Done? ", qjob.in_final_state(),"| Cancelled? ",qjob.cancelled())
                                 if not qdone: running_start+=1;
                             
+                            print(f"[DEBUG] Job done status: {qjob.done()}, final_state: {qjob.in_final_state()}, cancelled: {qjob.cancelled()}")
                             if qjob.done() :
                                # only get here once we get DONE status
                                result=qjob.result()     # get the result
-                               counts=result.get_counts(qcirc)   
+                               counts=result.get_counts(qcirc)
                                maxpattern=max(counts,key=counts.get)
                                qubitpattern=maxpattern
                                maxvalue=counts[maxpattern]
                                print("Maximum value:",maxvalue, "Maximum pattern:",maxpattern)
+                               print("[DEBUG] About to write result file...")
                                if UseLocal:
                                    sleep(3)
                                thinking = False  # this cues the display thread to show the qubits in maxpattern
@@ -1556,8 +1558,9 @@ while outer_control_loop:
                                    with open(temp, "w") as f:
                                        json.dump(result_data, f)
                                    temp.rename(RESULT_FILE)
+                                   print(f"[RESULT] Written to {RESULT_FILE}")
                                except Exception as e:
-                                   print(f"Warning: could not write result file: {e}")
+                                   print(f"[ERROR] Could not write result file: {e}")
                             if running_timeout :
                                 print(backend,' Queue appears to have stalled. Restarting Job.')
                             if running_cancelled :
