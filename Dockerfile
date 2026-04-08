@@ -45,9 +45,10 @@ COPY expt16.qasm expt16.qasm
 COPY expt32.qasm expt32.qasm
 COPY web_dashboard.py web_dashboard.py
 COPY templates/ templates/
+COPY files/ /app/files/
 
-# Create directories for outputs
-RUN mkdir -p /app/files/svg /app/files/control /app/files/qasm /app/credentials
+# Create credentials directory
+RUN mkdir -p /app/credentials
 
 # Install bash for entrypoint script (before switching to non-root user)
 RUN apt-get update && apt-get install -y --no-install-recommends bash && rm -rf /var/lib/apt/lists/*

@@ -1,0 +1,5 @@
+{
+  "qasm_file": "expt12.qasm",
+  "backend": "aer",
+  "shots": 1024
+}

@@ -69,7 +69,16 @@
   - Group (quantum): read, execute
   - Others: read, execute
 - **Contents**: Empty
-- **Purpose**: For QASM circuit files (not currently used)
+- **Purpose**: Intended for QASM circuit files (not currently used)
+
+#### Current QASM File Locations
+QASM files are currently stored in `/app/` directly:
+- `/app/expt.qasm` - Default 5-qubit circuit
+- `/app/expt12.qasm` - 12-qubit circuit
+- `/app/expt16.qasm` - 16-qubit circuit  
+- `/app/expt32.qasm` - 32-qubit circuit
+
+**⚠️ Note**: These built-in QASM files are hardcoded in the Dockerfile and the code looks for them in `/app/` (scriptfolder). The `/app/files/qasm/` directory is currently unused.
 
 ### /app/files/svg
 - **Type**: Directory
@@ -144,6 +153,8 @@
 
 ## Recommendations
 
+### Priority 1: Critical Issues
+
 1. **Fix svg/ Ownership**
    ```bash
    kubectl exec -n quantum deployment/quantum-kc-demo -- \
@@ -153,8 +164,28 @@
 2. **Verify Result File Creation**
    - Monitor `/app/files/control/` for `result.json` appearance
    - Check permissions when file appears
+   - Currently not being created - this is the core blocker
 
-3. **Add result.json to Expected Artifacts**
+### Priority 2: Design Improvements
+
+3. **Consolidate QASM Files Under /app/files/qasm/**
+   - Move built-in QASM files from `/app/` to `/app/files/qasm/`
+   - Update code to look in `/app/files/qasm/` instead of scriptfolder
+   - Would allow easier volume mounting for custom QASM files
+   - Better separation of concerns (data vs. runtime)
+
+   Proposed structure:
+   ```
+   /app/files/qasm/
+   ├── expt.qasm       (5-qubit default)
+   ├── expt12.qasm     (12-qubit)
+   ├── expt16.qasm     (16-qubit)
+   ├── expt32.qasm     (32-qubit)
+   └── custom_*.qasm   (user-uploaded circuits)
+   ```
+
+4. **Add result.json to Expected Artifacts**
    - Should be created after each execution
    - Should be readable by Flask API
    - Should be accessible to monitor thread
+   - Path: `/app/files/control/result.json`
