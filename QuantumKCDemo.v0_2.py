@@ -1338,265 +1338,265 @@ while outer_control_loop:
 
 # [Inner execution block starts here - marked for single-shot execution]
 
-    # ------------------------- Step 3:  Find the QASM Input file 
-    #
-    # 		find our experiment file... alternate can be specified on command line
-    #       use a couple tricks to make sure it is there
-    #       if not fall back on our default file
+# ------------------------- Step 3:  Find the QASM Input file 
+#
+# 		find our experiment file... alternate can be specified on command line
+#       use a couple tricks to make sure it is there
+#       if not fall back on our default file
 
-        # Set up LED array indices for this execution
-        if UseNeo:
-            if NeoTiled:    LED_array_indices = RQ2_array_indices
-            else:           LED_array_indices = matrix_map
+    # Set up LED array indices for this execution
+    if UseNeo:
+        if NeoTiled:    LED_array_indices = RQ2_array_indices
+        else:           LED_array_indices = matrix_map
 
-        scriptfolder = os.path.dirname(os.path.realpath(__file__))
-        if ('16' in  qasmfileinput):    qasmfilename='expt16.qasm' 
-        elif ('12' in qasmfileinput):    qasmfilename='expt12.qasm' 
-        else: qasmfilename = qasmfileinput
-          #qasmfilename='expt.qasm'
-        print("QASM File:",qasmfilename)
+    scriptfolder = os.path.dirname(os.path.realpath(__file__))
+    if ('16' in  qasmfileinput):    qasmfilename='expt16.qasm' 
+    elif ('12' in qasmfileinput):    qasmfilename='expt12.qasm' 
+    else: qasmfilename = qasmfileinput
+      #qasmfilename='expt.qasm'
+    print("QASM File:",qasmfilename)
     
-        #complete the path if necessary
-        if ('/' not in qasmfilename):
-          qasmfilename=scriptfolder+"/"+qasmfilename
-        if (not os.path.isfile(qasmfilename)):
-            qasmfilename=scriptfolder+"/"+'expt.qasm'
+    #complete the path if necessary
+    if ('/' not in qasmfilename):
+      qasmfilename=scriptfolder+"/"+qasmfilename
+    if (not os.path.isfile(qasmfilename)):
+        qasmfilename=scriptfolder+"/"+'expt.qasm'
         
-        print("OPENQASM file: ",qasmfilename)
-        if (not os.path.isfile(qasmfilename)):
-            print("QASM file not found... exiting.")
-            exit()
+    print("OPENQASM file: ",qasmfilename)
+    if (not os.path.isfile(qasmfilename)):
+        print("QASM file not found... exiting.")
+        exit()
     
     
-        # ------------------- Step 4. Instantiate our display thread and our backend
+    # ------------------- Step 4. Instantiate our display thread and our backend
     
-        #        -- (Note that we turned on the display itself earlier; this creates an object we can launch in a parallel thread)
+    #        -- (Note that we turned on the display itself earlier; this creates an object we can launch in a parallel thread)
     
-        # Instantiate an instance of our glow class
-        print("Instantiating glow...")
-        glowing = glow()
-        # create the html shell file
-        write_svg_file(pixels, maxpattern, 2.5, True)
+    # Instantiate an instance of our glow class
+    print("Instantiating glow...")
+    glowing = glow()
+    # create the html shell file
+    write_svg_file(pixels, maxpattern, 2.5, True)
     
     
-        # ------------------- Step 5. Read our input file create the circuit, and confirm how many qubits we need
-        #							if it is more than specified in the command line, adjust!
+    # ------------------- Step 5. Read our input file create the circuit, and confirm how many qubits we need
+    #							if it is more than specified in the command line, adjust!
      
-        exptfile = open(qasmfilename,'r') # open the file with the OPENQASM code in it
-        qasm= exptfile.read()            # read the contents into our experiment string
+    exptfile = open(qasmfilename,'r') # open the file with the OPENQASM code in it
+    qasm= exptfile.read()            # read the contents into our experiment string
     
-        if (len(qasm)<5):                # if that is too short to be real, exit
-            exit
-        else:                            # otherwise print it to the console for reference
-            print("OPENQASM code to send:\n",qasm)
+    if (len(qasm)<5):                # if that is too short to be real, exit
+        exit
+    else:                            # otherwise print it to the console for reference
+        print("OPENQASM code to send:\n",qasm)
     
-        # ------------------ Step 6. Instantiate our Quantum Service !
+    # ------------------ Step 6. Instantiate our Quantum Service !
     
-        #to determin the number of qubits, we have to make the circuit
+    #to determin the number of qubits, we have to make the circuit
         
-        qcirc=QuantumCircuit.from_qasm_str(qasm)   
-        qubits_needed = qcirc.num_qubits
+    qcirc=QuantumCircuit.from_qasm_str(qasm)   
+    qubits_needed = qcirc.num_qubits
     
-        rainbowTie = Thread(target=glowing.run)    			 #  instantiate the display thread
-        StartQuantumService()                                # try to connect and instantiate the IBMQ 
+    rainbowTie = Thread(target=glowing.run)    			 #  instantiate the display thread
+    StartQuantumService()                                # try to connect and instantiate the IBMQ 
     
-        qcirc=QuantumCircuit.from_qasm_str(qasm)   
+    qcirc=QuantumCircuit.from_qasm_str(qasm)   
     
-        # -------------------- Step 7. draw the circuit on the terminal and adjust the display settings if necessary
-        try:
-            print("generating circuit from QASM")# (qcirc)
-        except UnicodeEncodeError:
-            print ('Unable to render quantum circuit drawing; incompatible Unicode environment')
-        except:
-            print ('Unable to render quantum circuit drawing for some reason')
+    # -------------------- Step 7. draw the circuit on the terminal and adjust the display settings if necessary
+    try:
+        print("generating circuit from QASM")# (qcirc)
+    except UnicodeEncodeError:
+        print ('Unable to render quantum circuit drawing; incompatible Unicode environment')
+    except:
+        print ('Unable to render quantum circuit drawing for some reason')
         
-        if qubits_needed > 16:
-            display = ibm_q32x
-            maxpattern = '0' * 32
-            print("circuit width: ", qubits_needed, " using 32 qubit display")
-        elif (qubits_needed > 5 and not UseHex) or UseQ16:
-            display = ibm_qx16
-            maxpattern='0000000000000000'
-            print ("circuit width: ",qubits_needed," using 16 qubit display")
+    if qubits_needed > 16:
+        display = ibm_q32x
+        maxpattern = '0' * 32
+        print("circuit width: ", qubits_needed, " using 32 qubit display")
+    elif (qubits_needed > 5 and not UseHex) or UseQ16:
+        display = ibm_qx16
+        maxpattern='0000000000000000'
+        print ("circuit width: ",qubits_needed," using 16 qubit display")
+    else:
+        if (UseTee and qubits_needed <= 5 ):
+            display = ibm_qx5t
+            maxpattern='00000'
+        elif (UseHex):
+            display = ibm_qhex
+            maxpattern='000000000000'
         else:
-            if (UseTee and qubits_needed <= 5 ):
-                display = ibm_qx5t
-                maxpattern='00000'
-            elif (UseHex):
-                display = ibm_qhex
-                maxpattern='000000000000'
-            else:
-                display = ibm_qx5
-                maxpattern='00000'
+            display = ibm_qx5
+            maxpattern='00000'
     
-            print ("circuit width: ",qubits_needed," using 5 qubit display")
-        qubitpattern=maxpattern
+        print ("circuit width: ",qubits_needed," using 5 qubit display")
+    qubitpattern=maxpattern
     
-        rainbowTie.start()                          # start the display thread
+    rainbowTie.start()                          # start the display thread
     
-        #---------------------- Step 8: START YOUR ENGINES -- everything is set up, lets run our job (and loop)
+    #---------------------- Step 8: START YOUR ENGINES -- everything is set up, lets run our job (and loop)
     
-        while Looping:
-           runcounter += 1
+    while Looping:
+       runcounter += 1
     
-           # Re-read config.json each iteration to pick up QASM file changes
-           try:
-               _config_path = Path(os.environ.get("QUANTUM_FILES_DIR", "/app/files")) / "control" / "config.json"
-               if _config_path.exists():
-                   with open(_config_path, 'r') as _f:
-                       _fresh_config = json.load(_f)
-                   _new_qasm = _fresh_config.get("qasm_file")
-                   if _new_qasm:
-                       qasmfileinput = _new_qasm
-                       print(f"[LOOP] Using QASM file from config: {_new_qasm}")
-           except Exception as _e:
-               print(f"[LOOP] Warning: could not re-read config qasm_file: {_e}")
+       # Re-read config.json each iteration to pick up QASM file changes
+       try:
+           _config_path = Path(os.environ.get("QUANTUM_FILES_DIR", "/app/files")) / "control" / "config.json"
+           if _config_path.exists():
+               with open(_config_path, 'r') as _f:
+                   _fresh_config = json.load(_f)
+               _new_qasm = _fresh_config.get("qasm_file")
+               if _new_qasm:
+                   qasmfileinput = _new_qasm
+                   print(f"[LOOP] Using QASM file from config: {_new_qasm}")
+       except Exception as _e:
+           print(f"[LOOP] Warning: could not re-read config qasm_file: {_e}")
     
-           if "aer" in backendparm: UseLocal=True
-           try:
-               if not UseLocal:
-                   p=ping()
+       if "aer" in backendparm: UseLocal=True
+       try:
+           if not UseLocal:
+               p=ping()
+           else:
+               p=200
+       except:
+           print("connection problem with IBMQ")
+       else:
+           if p==200:
+               orient()
+               showlogo = True
+               thinking = True
+               Qname=Q.name
+               print("Name:",Q.name,"Version:",Q.version,"No. of qubits:",Q.num_qubits)
+               if not UseLocal and not "aer" in backendparm: 
+                   Qstatus=Q.status()
+                   print(Qstatus.backend_name, "is simulator? ", Q.simulator, "| operational: ", Qstatus.operational ,"|  jobs in queue:",Qstatus.pending_jobs)
+    
+               try:
+                   if not UseLocal:
+                        Qstatus = Q.status()  # check the availability
+               except:
+                   print('Problem getting backend status... waiting to try again')
                else:
-                   p=200
-           except:
-               print("connection problem with IBMQ")
-           else:
-               if p==200:
-                   orient()
-                   showlogo = True
-                   thinking = True
-                   Qname=Q.name
-                   print("Name:",Q.name,"Version:",Q.version,"No. of qubits:",Q.num_qubits)
-                   if not UseLocal and not "aer" in backendparm: 
-                       Qstatus=Q.status()
-                       print(Qstatus.backend_name, "is simulator? ", Q.simulator, "| operational: ", Qstatus.operational ,"|  jobs in queue:",Qstatus.pending_jobs)
-    
-                   try:
-                       if not UseLocal:
-                            Qstatus = Q.status()  # check the availability
-                   except:
-                       print('Problem getting backend status... waiting to try again')
+                   if not UseLocal: 
+                        Qstatus=Q.status()                
+                        print('Backend Status: ',Qstatus.status_msg, 'operational:',Qstatus.operational)
+                        if debug: input('press enter')
+                        qstatmsg=Qstatus.status_msg
+                        q_operational=Qstatus.operational
                    else:
-                       if not UseLocal: 
-                            Qstatus=Q.status()                
-                            print('Backend Status: ',Qstatus.status_msg, 'operational:',Qstatus.operational)
-                            if debug: input('press enter')
-                            qstatmsg=Qstatus.status_msg
-                            q_operational=Qstatus.operational
+                        qstatmsg='active'
+                        q_operational=False
+                   if (qstatmsg == 'active' and q_operational)  or UseLocal:
+                       
+                       print('     executing quantum circuit... on ',Q.name)
+                       #print(Q.name,' options:',Q.options)
+                       try:
+                            print (qcirc)
+                       except UnicodeEncodeError:
+                            print ('Unable to render quantum circuit drawing; incompatible Unicode environment')
+                       except:
+                            print ('Unable to render quantum circuit drawing for some reason')
+                       try:
+                            qk1_circ=transpile(qcirc, Q) # transpile for the new primitive
+                       except:
+                            print("problem transpiling circuit")
                        else:
-                            qstatmsg='active'
-                            q_operational=False
-                       if (qstatmsg == 'active' and q_operational)  or UseLocal:
+                            print("transpilation complete")                    
+                       #try:
+                            if not UseLocal:
+                                print("backend: ",Q.name," operational? ",Q.status().operational," Pending:",Q.status().pending_jobs)
+                            else:
+                                print("backend: ",Q.name," operational? ALWAYS")
+                            if debug: input('Press the Enter Key')
+                            print("running job")                       
+                            qjob=Q.run(qk1_circ) # run 
+                            print("JobID: ",qjob.job_id())
+                            print("Job Done?",qjob.done())
+    						# This next line should prevent running the job more than once on a real backend because UseLocal will be false.
+                            Looping =  UseLocal or Q.simulator	
+                            if runcounter < 3: print("Using ", Qname, " ... Looping is set ", Looping)
                        
-                           print('     executing quantum circuit... on ',Q.name)
-                           #print(Q.name,' options:',Q.options)
-                           try:
-                                print (qcirc)
-                           except UnicodeEncodeError:
-                                print ('Unable to render quantum circuit drawing; incompatible Unicode environment')
-                           except:
-                                print ('Unable to render quantum circuit drawing for some reason')
-                           try:
-                                qk1_circ=transpile(qcirc, Q) # transpile for the new primitive
-                           except:
-                                print("problem transpiling circuit")
-                           else:
-                                print("transpilation complete")                    
-                           #try:
+                            running_start = 0
+                            running_timeout = False
+                            running_cancelled = False
+                            showlogo =  False
+                            qdone = False
+                            while not (qdone or running_timeout or running_cancelled):
+                                qdone = qjob.in_final_state() or qjob.cancelled()
                                 if not UseLocal:
-                                    print("backend: ",Q.name," operational? ",Q.status().operational," Pending:",Q.status().pending_jobs)
+                                    print(running_start,qjob.job_id(),"Job Done? ", qjob.in_final_state(),"| Cancelled? ",qjob.cancelled(),"| queued jobs:",qjob.backend().status().pending_jobs)
                                 else:
-                                    print("backend: ",Q.name," operational? ALWAYS")
-                                if debug: input('Press the Enter Key')
-                                print("running job")                       
-                                qjob=Q.run(qk1_circ) # run 
-                                print("JobID: ",qjob.job_id())
-                                print("Job Done?",qjob.done())
-        						# This next line should prevent running the job more than once on a real backend because UseLocal will be false.
-                                Looping =  UseLocal or Q.simulator	
-                                if runcounter < 3: print("Using ", Qname, " ... Looping is set ", Looping)
-                       
-                                running_start = 0
-                                running_timeout = False
-                                running_cancelled = False
-                                showlogo =  False
-                                qdone = False
-                                while not (qdone or running_timeout or running_cancelled):
-                                    qdone = qjob.in_final_state() or qjob.cancelled()
-                                    if not UseLocal:
-                                        print(running_start,qjob.job_id(),"Job Done? ", qjob.in_final_state(),"| Cancelled? ",qjob.cancelled(),"| queued jobs:",qjob.backend().status().pending_jobs)
-                                    else:
-                                        print(running_start,qjob.job_id(),"Job Done? ", qjob.in_final_state(),"| Cancelled? ",qjob.cancelled())
-                                    if not qdone: running_start+=1;
+                                    print(running_start,qjob.job_id(),"Job Done? ", qjob.in_final_state(),"| Cancelled? ",qjob.cancelled())
+                                if not qdone: running_start+=1;
                             
-                                print(f"[DEBUG] Job done status: {qjob.done()}, final_state: {qjob.in_final_state()}, cancelled: {qjob.cancelled()}")
+                            print(f"[DEBUG] Job done status: {qjob.done()}, final_state: {qjob.in_final_state()}, cancelled: {qjob.cancelled()}")
 
-                                # Process results regardless of job.done() status - the job completed from the waiting loop
-                                try:
-                                   result=qjob.result()     # get the result
-                                   counts=result.get_counts(qcirc)
-                                   maxpattern=max(counts,key=counts.get)
-                                   qubitpattern=maxpattern
-                                   maxvalue=counts[maxpattern]
-                                   print("Maximum value:",maxvalue, "Maximum pattern:",maxpattern)
+                            # Process results regardless of job.done() status - the job completed from the waiting loop
+                            try:
+                               result=qjob.result()     # get the result
+                               counts=result.get_counts(qcirc)
+                               maxpattern=max(counts,key=counts.get)
+                               qubitpattern=maxpattern
+                               maxvalue=counts[maxpattern]
+                               print("Maximum value:",maxvalue, "Maximum pattern:",maxpattern)
 
-                                   if UseLocal:
-                                       sleep(3)
-                                   thinking = False  # this cues the display thread to show the qubits in maxpattern
+                               if UseLocal:
+                                   sleep(3)
+                               thinking = False  # this cues the display thread to show the qubits in maxpattern
 
-                                   # Write result to file for Flask to read during loop mode
-                                   print("[DEBUG] About to write result file...")
-                                   try:
-                                       RESULT_FILE = Path(os.environ.get("QUANTUM_FILES_DIR", "/app/files")) / "control" / "result.json"
-                                       result_data = {
-                                           "pattern": maxpattern,
-                                           "counts": counts,
-                                           "num_qubits": len(maxpattern),
-                                           "shots": sum(counts.values()),
-                                           "timestamp": datetime.now().isoformat(),
-                                           "backend": backendparm,
-                                       }
-                                       temp = RESULT_FILE.with_suffix(".tmp")
-                                       with open(temp, "w") as f:
-                                           json.dump(result_data, f)
-                                       temp.rename(RESULT_FILE)
-                                       print(f"[RESULT] Written to {RESULT_FILE}")
-                                   except Exception as e:
-                                       print(f"[ERROR] Could not write result file: {e}")
-                                except Exception as e:
-                                   print(f"[ERROR] Failed to process results: {e}")
-                                if running_timeout :
-                                    print(backend,' Queue appears to have stalled. Restarting Job.')
-                                if running_cancelled :
-                                    print(backend,' Job cancelled at backend. Restarting.')    
+                               # Write result to file for Flask to read during loop mode
+                               print("[DEBUG] About to write result file...")
+                               try:
+                                   RESULT_FILE = Path(os.environ.get("QUANTUM_FILES_DIR", "/app/files")) / "control" / "result.json"
+                                   result_data = {
+                                       "pattern": maxpattern,
+                                       "counts": counts,
+                                       "num_qubits": len(maxpattern),
+                                       "shots": sum(counts.values()),
+                                       "timestamp": datetime.now().isoformat(),
+                                       "backend": backendparm,
+                                   }
+                                   temp = RESULT_FILE.with_suffix(".tmp")
+                                   with open(temp, "w") as f:
+                                       json.dump(result_data, f)
+                                   temp.rename(RESULT_FILE)
+                                   print(f"[RESULT] Written to {RESULT_FILE}")
+                               except Exception as e:
+                                   print(f"[ERROR] Could not write result file: {e}")
+                            except Exception as e:
+                               print(f"[ERROR] Failed to process results: {e}")
+                            if running_timeout :
+                                print(backend,' Queue appears to have stalled. Restarting Job.')
+                            if running_cancelled :
+                                print(backend,' Job cancelled at backend. Restarting.')    
                        
-           goAgain=False                    # wait to do it again
-           if Looping: print('Iteration ',runcounter,' complete; Waiting ',interval,'s before next run...')
+       goAgain=False                    # wait to do it again
+       if Looping: print('Iteration ',runcounter,' complete; Waiting ',interval,'s before next run...')
        
-           myTimer=process_time()
-           while not goAgain:
-              if not NoHat:
-                  for event in hat.stick.get_events():   
-                     if event.action == 'pressed':      #somebody tapped the joystick -- go now
-                        goAgain=True
-                        blinky(.001)
-                        hat.set_pixels(pixels)
-                        if DualDisplay: hat2.set_pixels(pixels)
-                     if event.action == 'held' and event.direction =='middle':
-                        shutdown=True 
-                     if event.action == 'held' and event.direction !='middle':
-                         Looping = False
-                         break
-              if (process_time()-myTimer>interval):       # 10 seconds elapsed -- go now
+       myTimer=process_time()
+       while not goAgain:
+          if not NoHat:
+              for event in hat.stick.get_events():   
+                 if event.action == 'pressed':      #somebody tapped the joystick -- go now
                     goAgain=True
+                    blinky(.001)
+                    hat.set_pixels(pixels)
+                    if DualDisplay: hat2.set_pixels(pixels)
+                 if event.action == 'held' and event.direction =='middle':
+                    shutdown=True 
+                 if event.action == 'held' and event.direction !='middle':
+                     Looping = False
+                     break
+          if (process_time()-myTimer>interval):       # 10 seconds elapsed -- go now
+                goAgain=True
     
-           # Mark the command as complete and return to waiting state
-           if outer_control_loop:
-              print("\n[CONTROL] Circuit execution complete.")
-              command_complete()
-           # If outer_control_loop is True, the while loop continues to wait for next command
-           # If False (CLI mode), break out of the outer loop
-           else:
-              break
+       # Mark the command as complete and return to waiting state
+       if outer_control_loop:
+          print("\n[CONTROL] Circuit execution complete.")
+          command_complete()
+       # If outer_control_loop is True, the while loop continues to wait for next command
+       # If False (CLI mode), break out of the outer loop
+       else:
+          break
     
     print("Program Execution ended normally")
