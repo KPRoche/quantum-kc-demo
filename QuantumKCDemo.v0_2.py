@@ -1555,7 +1555,7 @@ while outer_control_loop:
                                    temp = RESULT_FILE.with_suffix(".tmp")
                                    with open(temp, "w") as f:
                                        json.dump(result_data, f)
-                                   temp.replace(RESULT_FILE)
+                                   temp.rename(RESULT_FILE)
                                except Exception as e:
                                    print(f"Warning: could not write result file: {e}")
                             if running_timeout :
