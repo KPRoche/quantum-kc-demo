@@ -406,6 +406,8 @@ if DualNEO: matrix_map = create_matrix_map(8, 5)
 else:       matrix_map = create_matrix_map(8,8)
 matrix_map2 = create_matrix_map(8, 16)
 
+# Initialize LED_array_indices (will be set properly in execution block)
+LED_array_indices = matrix_map
 
 #----------------------------------------------------------------------------
 #       Create a SVG rendition of the pixel array
@@ -557,7 +559,7 @@ def orient():
 
 # -- showqubits maps a bit pattern (a string of up to 16 0s and 1s) onto the current display template
 def showqubits(pattern='0000000000000000'):
-   global hat, qubits
+   global hat, qubits, LED_array_indices
    padding=''
    svgpattern=pattern
    if len(pattern)<len(display):
@@ -658,7 +660,7 @@ def blinky(time=20,experimentID=''):
 #    build a class glow so we can launch display control as a thread
 #------------------------------------------------
 class glow():
-   global thinking,hat, maxpattern, shutdown,off,Qlogo, QArcs, Qhex
+   global thinking,hat, maxpattern, shutdown,off,Qlogo, QArcs, Qhex, LED_array_indices
 
    def __init__(self):
       self._running = True
