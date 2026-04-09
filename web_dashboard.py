@@ -424,11 +424,11 @@ def execute_circuit():
 
     # If control system is enabled, send command to quantum process
     if CONTROL_ENABLED:
-        # Write config.json with qasm_file so subprocess can read it (as fallback)
+        # Write config.json with qasm_file and loop_mode so subprocess can read it
         config_path = FILES_DIR / "control" / "config.json"
         try:
             with open(config_path, 'w') as f:
-                json.dump({"qasm_file": qasm_file}, f)
+                json.dump({"qasm_file": qasm_file, "loop_mode": False}, f)
         except Exception as e:
             print(f"Warning: Could not write config.json: {e}")
 
