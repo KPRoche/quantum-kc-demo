@@ -699,8 +699,14 @@ class glowNoOp():
       self._running = False
 
    def run(self):
-      # Do nothing - no display hardware available
-      pass
+      # No-op: thread exits immediately in headless mode
+      # This prevents the display hardware initialization from blocking execution
+      try:
+         pass
+      except Exception as e:
+         print(f"[glowNoOp] Unexpected error: {e}")
+         import traceback
+         traceback.print_exc()
 
 def config_display_mask():
     """Configure display mask based on circuit qubit count"""
@@ -1511,7 +1517,8 @@ while outer_control_loop:
     
     #        -- (Note that we turned on the display itself earlier; this creates an object we can launch in a parallel thread)
     
-    # Instantiate an instance of our glow class
+    # Instantiate a FRESH instance of our glow class for each execution
+    # (Previous instance may have already run its thread, making it unusable for restart)
     print("Instantiating glow...")
     if NoHat:
         # Running in container or headless environment - use no-op glow
@@ -1541,7 +1548,8 @@ while outer_control_loop:
     qcirc=QuantumCircuit.from_qasm_str(qasm)   
     qubits_needed = qcirc.num_qubits
     
-    rainbowTie = Thread(target=glowing.run)    			 #  instantiate the display thread
+    # Create a fresh thread for each execution (old thread may have already finished from previous run)
+    rainbowTie = Thread(target=glowing.run, daemon=False)  # instantiate the display thread
     StartQuantumService()                                # try to connect and instantiate the IBMQ 
     
     qcirc=QuantumCircuit.from_qasm_str(qasm)   
@@ -1554,7 +1562,17 @@ while outer_control_loop:
     except:
         print ('Unable to render quantum circuit drawing for some reason')
         
-    rainbowTie.start()                          # start the display thread
+    try:
+        rainbowTie.start()                          # start the display thread
+    except RuntimeError as e:
+        # Thread was already started in a previous run - create a new one
+        print(f"[WARNING] Could not start display thread: {e}")
+        print("[WARNING] Creating fresh display thread...")
+        rainbowTie = Thread(target=glowing.run, daemon=False)
+        try:
+            rainbowTie.start()
+        except Exception as e2:
+            print(f"[ERROR] Failed to start replacement thread: {e2}")
 
     #---------------------- Step 8: START YOUR ENGINES -- everything is set up, lets run our job (and loop)
 
