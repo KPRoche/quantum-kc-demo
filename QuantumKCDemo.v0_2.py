@@ -1537,38 +1537,73 @@ while outer_control_loop:
     except:
         print ('Unable to render quantum circuit drawing for some reason')
         
-    # Configure display mask based on circuit width
-    qubitpattern = config_display_mask()
-    
     rainbowTie.start()                          # start the display thread
-    
+
     #---------------------- Step 8: START YOUR ENGINES -- everything is set up, lets run our job (and loop)
-    
+
     # Execute the circuit (inline for control mode, loop for loop mode)
     runcounter += 1
 
-    # Check if loop mode is enabled via config
-    loop_iterations = 1  # Default: single execution
-    try:
-        _config_path = Path(os.environ.get("CONTROL_DIR", "/app/files/control")) / "config.json"
-        if _config_path.exists():
-            with open(_config_path, 'r') as _f:
-                _config = json.load(_f)
-                if _config.get("loop_mode"):
-                    loop_iterations = _config.get("loop_iterations", 10)
-                    print(f"[CONTROL] Loop mode enabled, running {loop_iterations} iterations")
-    except Exception as _e:
-        print(f"[CONTROL] Could not read loop mode config: {_e}")
+    # Loop mode: re-read config on each iteration to allow dynamic adjustments
+    iteration = 0
+    while True:
+        iteration += 1
 
-    # Execute circuit(s) - NEW ARCHITECTURE REPLACES while Looping:
-    for iteration in range(loop_iterations):
-        if loop_iterations > 1:
-            print(f"\n[LOOP] Iteration {iteration + 1}/{loop_iterations}")
+        # Re-read config for each iteration to pick up changes
+        try:
+            _config_path = Path(os.environ.get("CONTROL_DIR", "/app/files/control")) / "config.json"
+            if _config_path.exists():
+                with open(_config_path, 'r') as _f:
+                    _config = json.load(_f)
+                    if not _config.get("loop_mode", False):
+                        print(f"[LOOP] Loop mode disabled, stopping at iteration {iteration}")
+                        break
+                    loop_iterations = _config.get("loop_iterations", 1)
+                    qasmfileinput = _config.get("qasm_file", "")
+            else:
+                # First iteration without config = single execution
+                if iteration > 1:
+                    print("[LOOP] Config file missing, stopping")
+                    break
+                loop_iterations = 1
+                qasmfileinput = ""
+        except Exception as _e:
+            print(f"[CONTROL] Error reading config: {_e}")
+            break
 
-        result = execute_circuit_once(qcirc, qcirc)
+        if iteration > 1:
+            print(f"\n[LOOP] Iteration {iteration}/{loop_iterations if loop_iterations > 1 else 'single'}")
 
-        if loop_iterations > 1 and iteration < loop_iterations - 1:
-            # Wait before next iteration
+        # Find and load QASM file for this iteration
+        qasmfilename = find_qasm_file(qasmfileinput)
+
+        # Read QASM and create circuit
+        exptfile = open(qasmfilename, 'r')
+        qasm = exptfile.read()
+        exptfile.close()
+
+        if len(qasm) < 5:
+            print("[ERROR] QASM file is too short or empty")
+            break
+
+        print("OPENQASM code:\n", qasm)
+
+        # Create circuit from QASM
+        qasm_circuit_obj = QuantumCircuit.from_qasm_str(qasm)
+        qubits_needed = qasm_circuit_obj.num_qubits
+
+        # Configure display mask based on current circuit
+        qubitpattern = config_display_mask()
+
+        # Execute the circuit
+        result = execute_circuit_once(qasm_circuit_obj, qasm_circuit_obj)
+
+        # Check if this completes the loop
+        if iteration >= loop_iterations or loop_iterations == 1:
+            break
+
+        # Wait before next iteration
+        if iteration < loop_iterations:
             wait_interval = 5
             try:
                 wait_interval = int(os.environ.get("LOOP_INTERVAL", "5"))
@@ -1577,252 +1612,15 @@ while outer_control_loop:
             print(f"[LOOP] Waiting {wait_interval}s before next iteration...")
             sleep(wait_interval)
 
+        # Mark the command as complete and return to waiting state
+        if outer_control_loop:
+            print("\n[CONTROL] Circuit execution complete.")
+            command_complete()
+        # If outer_control_loop is True, the while loop continues to wait for next command
+        # If False (CLI mode), break out of the outer loop
+        else:
+            break
+
     else:
         print(f"[CONTROL] Unknown command: {cmd.get('command')}")
         continue
-
-# [Inner execution block starts here - marked for single-shot execution]
-
-# ------------------------- Step 3:  Find the QASM Input file 
-#
-# 		find our experiment file... alternate can be specified on command line
-#       use a couple tricks to make sure it is there
-#       if not fall back on our default file
-
-    # Set up LED array indices for this execution
-    if UseNeo:
-        if NeoTiled:    LED_array_indices = RQ2_array_indices
-        else:           LED_array_indices = matrix_map
-
-    scriptfolder = os.path.dirname(os.path.realpath(__file__))
-    if ('16' in  qasmfileinput):    qasmfilename='expt16.qasm' 
-    elif ('12' in qasmfileinput):    qasmfilename='expt12.qasm' 
-    else: qasmfilename = qasmfileinput
-      #qasmfilename='expt.qasm'
-    print("QASM File:",qasmfilename)
-    
-    #complete the path if necessary
-    if ('/' not in qasmfilename):
-      qasmfilename=scriptfolder+"/"+qasmfilename
-    if (not os.path.isfile(qasmfilename)):
-        qasmfilename=scriptfolder+"/"+'expt.qasm'
-        
-    print("OPENQASM file: ",qasmfilename)
-    if (not os.path.isfile(qasmfilename)):
-        print("QASM file not found... exiting.")
-        exit()
-    
-    
-    # ------------------- Step 4. Instantiate our display thread and our backend
-    
-    #        -- (Note that we turned on the display itself earlier; this creates an object we can launch in a parallel thread)
-    
-    # Instantiate an instance of our glow class
-    print("Instantiating glow...")
-    glowing = glow()
-    # create the html shell file
-    write_svg_file(pixels, maxpattern, 2.5, True)
-    
-    
-    # ------------------- Step 5. Read our input file create the circuit, and confirm how many qubits we need
-    #							if it is more than specified in the command line, adjust!
-     
-    exptfile = open(qasmfilename,'r') # open the file with the OPENQASM code in it
-    qasm= exptfile.read()            # read the contents into our experiment string
-    
-    if (len(qasm)<5):                # if that is too short to be real, exit
-        exit
-    else:                            # otherwise print it to the console for reference
-        print("OPENQASM code to send:\n",qasm)
-    
-    # ------------------ Step 6. Instantiate our Quantum Service !
-    
-    #to determin the number of qubits, we have to make the circuit
-        
-    qcirc=QuantumCircuit.from_qasm_str(qasm)   
-    qubits_needed = qcirc.num_qubits
-    
-    rainbowTie = Thread(target=glowing.run)    			 #  instantiate the display thread
-    StartQuantumService()                                # try to connect and instantiate the IBMQ 
-    
-    qcirc=QuantumCircuit.from_qasm_str(qasm)   
-    
-    # -------------------- Step 7. draw the circuit on the terminal and adjust the display settings if necessary
-    try:
-        print("generating circuit from QASM")# (qcirc)
-    except UnicodeEncodeError:
-        print ('Unable to render quantum circuit drawing; incompatible Unicode environment')
-    except:
-        print ('Unable to render quantum circuit drawing for some reason')
-        
-    # Configure display mask based on circuit width
-    qubitpattern = config_display_mask()
-    
-    rainbowTie.start()                          # start the display thread
-    
-    #---------------------- Step 8: START YOUR ENGINES -- everything is set up, lets run our job (and loop)
-    
-    while Looping:
-       runcounter += 1
-    
-       # Re-read config.json each iteration to pick up QASM file changes
-       try:
-           _config_path = Path(os.environ.get("QUANTUM_FILES_DIR", "/app/files")) / "control" / "config.json"
-           if _config_path.exists():
-               with open(_config_path, 'r') as _f:
-                   _fresh_config = json.load(_f)
-               _new_qasm = _fresh_config.get("qasm_file")
-               if _new_qasm:
-                   qasmfileinput = _new_qasm
-                   print(f"[LOOP] Using QASM file from config: {_new_qasm}")
-       except Exception as _e:
-           print(f"[LOOP] Warning: could not re-read config qasm_file: {_e}")
-    
-       if "aer" in backendparm: UseLocal=True
-       try:
-           if not UseLocal:
-               p=ping()
-           else:
-               p=200
-       except:
-           print("connection problem with IBMQ")
-       else:
-           if p==200:
-               orient()
-               showlogo = True
-               thinking = True
-               Qname=Q.name
-               print("Name:",Q.name,"Version:",Q.version,"No. of qubits:",Q.num_qubits)
-               if not UseLocal and not "aer" in backendparm: 
-                   Qstatus=Q.status()
-                   print(Qstatus.backend_name, "is simulator? ", Q.simulator, "| operational: ", Qstatus.operational ,"|  jobs in queue:",Qstatus.pending_jobs)
-    
-               try:
-                   if not UseLocal:
-                        Qstatus = Q.status()  # check the availability
-               except:
-                   print('Problem getting backend status... waiting to try again')
-               else:
-                   if not UseLocal: 
-                        Qstatus=Q.status()                
-                        print('Backend Status: ',Qstatus.status_msg, 'operational:',Qstatus.operational)
-                        if debug: input('press enter')
-                        qstatmsg=Qstatus.status_msg
-                        q_operational=Qstatus.operational
-                   else:
-                        qstatmsg='active'
-                        q_operational=False
-                   if (qstatmsg == 'active' and q_operational)  or UseLocal:
-                       
-                       print('     executing quantum circuit... on ',Q.name)
-                       #print(Q.name,' options:',Q.options)
-                       try:
-                            print (qcirc)
-                       except UnicodeEncodeError:
-                            print ('Unable to render quantum circuit drawing; incompatible Unicode environment')
-                       except:
-                            print ('Unable to render quantum circuit drawing for some reason')
-                       try:
-                            qk1_circ=transpile(qcirc, Q) # transpile for the new primitive
-                       except:
-                            print("problem transpiling circuit")
-                       else:
-                            print("transpilation complete")                    
-                       #try:
-                            if not UseLocal:
-                                print("backend: ",Q.name," operational? ",Q.status().operational," Pending:",Q.status().pending_jobs)
-                            else:
-                                print("backend: ",Q.name," operational? ALWAYS")
-                            if debug: input('Press the Enter Key')
-                            print("running job")                       
-                            qjob=Q.run(qk1_circ) # run 
-                            print("JobID: ",qjob.job_id())
-                            print("Job Done?",qjob.done())
-    						# This next line should prevent running the job more than once on a real backend because UseLocal will be false.
-                            Looping =  UseLocal or Q.simulator	
-                            if runcounter < 3: print("Using ", Qname, " ... Looping is set ", Looping)
-                       
-                            running_start = 0
-                            running_timeout = False
-                            running_cancelled = False
-                            showlogo =  False
-                            qdone = False
-                            while not (qdone or running_timeout or running_cancelled):
-                                qdone = qjob.in_final_state() or qjob.cancelled()
-                                if not UseLocal:
-                                    print(running_start,qjob.job_id(),"Job Done? ", qjob.in_final_state(),"| Cancelled? ",qjob.cancelled(),"| queued jobs:",qjob.backend().status().pending_jobs)
-                                else:
-                                    print(running_start,qjob.job_id(),"Job Done? ", qjob.in_final_state(),"| Cancelled? ",qjob.cancelled())
-                                if not qdone: running_start+=1;
-                            
-                            print(f"[DEBUG] Job done status: {qjob.done()}, final_state: {qjob.in_final_state()}, cancelled: {qjob.cancelled()}")
-
-                            # Process results regardless of job.done() status - the job completed from the waiting loop
-                            try:
-                               result=qjob.result()     # get the result
-                               counts=result.get_counts(qcirc)
-                               maxpattern=max(counts,key=counts.get)
-                               qubitpattern=maxpattern
-                               maxvalue=counts[maxpattern]
-                               print("Maximum value:",maxvalue, "Maximum pattern:",maxpattern)
-
-                               if UseLocal:
-                                   sleep(3)
-                               thinking = False  # this cues the display thread to show the qubits in maxpattern
-
-                               # Write result to file for Flask to read during loop mode
-                               print("[DEBUG] About to write result file...")
-                               try:
-                                   RESULT_FILE = Path(os.environ.get("QUANTUM_FILES_DIR", "/app/files")) / "control" / "result.json"
-                                   result_data = {
-                                       "pattern": maxpattern,
-                                       "counts": counts,
-                                       "num_qubits": len(maxpattern),
-                                       "shots": sum(counts.values()),
-                                       "timestamp": datetime.now().isoformat(),
-                                       "backend": backendparm,
-                                   }
-                                   temp = RESULT_FILE.with_suffix(".tmp")
-                                   with open(temp, "w") as f:
-                                       json.dump(result_data, f)
-                                   temp.rename(RESULT_FILE)
-                                   print(f"[RESULT] Written to {RESULT_FILE}")
-                               except Exception as e:
-                                   print(f"[ERROR] Could not write result file: {e}")
-                            except Exception as e:
-                               print(f"[ERROR] Failed to process results: {e}")
-                            if running_timeout :
-                                print(backend,' Queue appears to have stalled. Restarting Job.')
-                            if running_cancelled :
-                                print(backend,' Job cancelled at backend. Restarting.')    
-                       
-       goAgain=False                    # wait to do it again
-       if Looping: print('Iteration ',runcounter,' complete; Waiting ',interval,'s before next run...')
-       
-       myTimer=process_time()
-       while not goAgain:
-          if not NoHat:
-              for event in hat.stick.get_events():   
-                 if event.action == 'pressed':      #somebody tapped the joystick -- go now
-                    goAgain=True
-                    blinky(.001)
-                    hat.set_pixels(pixels)
-                    if DualDisplay: hat2.set_pixels(pixels)
-                 if event.action == 'held' and event.direction =='middle':
-                    shutdown=True 
-                 if event.action == 'held' and event.direction !='middle':
-                     Looping = False
-                     break
-          if (process_time()-myTimer>interval):       # 10 seconds elapsed -- go now
-                goAgain=True
-    
-       # Mark the command as complete and return to waiting state
-       if outer_control_loop:
-          print("\n[CONTROL] Circuit execution complete.")
-          command_complete()
-       # If outer_control_loop is True, the while loop continues to wait for next command
-       # If False (CLI mode), break out of the outer loop
-       else:
-          break
-    
-    print("Program Execution ended normally")
