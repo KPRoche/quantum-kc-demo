@@ -1590,9 +1590,7 @@ while outer_control_loop:
             if _config_path.exists():
                 with open(_config_path, 'r') as _f:
                     _config = json.load(_f)
-                    if not _config.get("loop_mode", False):
-                        print(f"[LOOP] Loop mode disabled, stopping at iteration {iteration}")
-                        break
+                    loop_mode = _config.get("loop_mode", False)
                     loop_iterations = _config.get("loop_iterations", 1)
                     qasmfileinput = _config.get("qasm_file", "")
             else:
@@ -1600,6 +1598,7 @@ while outer_control_loop:
                 if iteration > 1:
                     print("[LOOP] Config file missing, stopping")
                     break
+                loop_mode = False
                 loop_iterations = 1
                 qasmfileinput = ""
         except Exception as _e:
@@ -1630,22 +1629,22 @@ while outer_control_loop:
         # Configure display mask based on current circuit
         qubitpattern = config_display_mask()
 
-        # Execute the circuit
+        # Execute the circuit (do this BEFORE checking loop_mode)
         result = execute_circuit_once(qasm_circuit_obj, qasm_circuit_obj)
 
-        # Check if this completes the loop
-        if iteration >= loop_iterations or loop_iterations == 1:
+        # After execution, check if we should continue looping
+        if not loop_mode or iteration >= loop_iterations:
+            print(f"[LOOP] Execution complete (loop_mode={loop_mode}, iterations={iteration}/{loop_iterations})")
             break
 
         # Wait before next iteration
-        if iteration < loop_iterations:
-            wait_interval = 5
-            try:
-                wait_interval = int(os.environ.get("LOOP_INTERVAL", "5"))
-            except:
-                pass
-            print(f"[LOOP] Waiting {wait_interval}s before next iteration...")
-            sleep(wait_interval)
+        wait_interval = 5
+        try:
+            wait_interval = int(os.environ.get("LOOP_INTERVAL", "5"))
+        except:
+            pass
+        print(f"[LOOP] Waiting {wait_interval}s before next iteration...")
+        sleep(wait_interval)
 
         # Mark the command as complete and return to waiting state
         if outer_control_loop:
