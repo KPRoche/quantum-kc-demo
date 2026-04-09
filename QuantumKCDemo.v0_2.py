@@ -668,7 +668,7 @@ class glow():
 
    def __init__(self):
       self._running = True
-      
+
    def stop(self):
       self._running = False
       self._stop = True
@@ -689,6 +689,18 @@ class glow():
               blinky(.1)
            else:
               showqubits(maxpattern)
+
+class glowNoOp():
+   """No-op glow class for container/headless environments without hardware"""
+   def __init__(self):
+      self._running = True
+
+   def stop(self):
+      self._running = False
+
+   def run(self):
+      # Do nothing - no display hardware available
+      pass
 
 def config_display_mask():
     """Configure display mask based on circuit qubit count"""
@@ -1501,7 +1513,12 @@ while outer_control_loop:
     
     # Instantiate an instance of our glow class
     print("Instantiating glow...")
-    glowing = glow()
+    if NoHat:
+        # Running in container or headless environment - use no-op glow
+        print("  (no-op mode - no display hardware detected)")
+        glowing = glowNoOp()
+    else:
+        glowing = glow()
     # create the html shell file
     write_svg_file(pixels, maxpattern, 2.5, True)
     
