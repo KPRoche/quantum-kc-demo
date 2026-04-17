@@ -735,7 +735,8 @@ def get_circuit_diagram():
         width = max(12, num_qubits * 0.3)
         height = max(8, num_qubits * 0.15 + 3)
 
-        fig = executor.circuit.draw(output='mpl', scale=0.7, figsize=(width, height))
+        fig = executor.circuit.draw(output='mpl', scale=0.7)
+        fig.set_size_inches(width, height)
 
         # Convert matplotlib figure to PNG base64
         buffer = BytesIO()
@@ -820,7 +821,8 @@ def get_circuit_png():
         width = max(12, num_qubits * 0.3)
         height = max(8, num_qubits * 0.15 + 3)
 
-        fig = executor.circuit.draw(output='mpl', scale=0.7, figsize=(width, height))
+        fig = executor.circuit.draw(output='mpl', scale=0.7)
+        fig.set_size_inches(width, height)
         buffer = BytesIO()
         fig.savefig(buffer, format='png', bbox_inches='tight', dpi=100)
         buffer.seek(0)
