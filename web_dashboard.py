@@ -692,8 +692,8 @@ def get_circuit_diagram():
     if not executor.qiskit_available:
         return jsonify({"error": "Qiskit not available"}), 503
 
-    # In loop mode, refresh the circuit from the current QASM file
-    _refresh_circuit_from_qasm_in_loop_mode()
+    # Ensure circuit is loaded from current QASM file (single and loop modes)
+    _ensure_circuit_loaded()
 
     with state_lock:
         if not executor.circuit:
@@ -780,8 +780,8 @@ def get_circuit_raw():
     if not executor.qiskit_available:
         return jsonify({"error": "Qiskit not available"}), 503
 
-    # In loop mode, refresh the circuit from the current QASM file
-    _refresh_circuit_from_qasm_in_loop_mode()
+    # Ensure circuit is loaded from current QASM file (single and loop modes)
+    _ensure_circuit_loaded()
 
     with state_lock:
         if not executor.circuit:
@@ -801,8 +801,8 @@ def get_circuit_png():
     if not executor.qiskit_available:
         return jsonify({"error": "Qiskit not available"}), 503
 
-    # In loop mode, refresh the circuit from the current QASM file
-    _refresh_circuit_from_qasm_in_loop_mode()
+    # Ensure circuit is loaded from current QASM file (single and loop modes)
+    _ensure_circuit_loaded()
 
     with state_lock:
         if not executor.circuit:
@@ -825,8 +825,8 @@ def get_circuit_ascii():
     if not executor.qiskit_available:
         return jsonify({"error": "Qiskit not available"}), 503
 
-    # In loop mode, refresh the circuit from the current QASM file
-    _refresh_circuit_from_qasm_in_loop_mode()
+    # Ensure circuit is loaded from current QASM file (single and loop modes)
+    _ensure_circuit_loaded()
 
     with state_lock:
         if not executor.circuit:
@@ -1058,27 +1058,26 @@ def get_loop_status():
         })
 
 
-def _refresh_circuit_from_qasm_in_loop_mode():
-    """Helper: In loop mode, reload circuit from the current QASM file"""
-    with state_lock:
-        loop_mode_active = quantum_state["loop_mode"]
-
-    if not loop_mode_active:
-        return  # Not in loop mode, use existing circuit
-
+def _ensure_circuit_loaded():
+    """Helper: Ensure circuit is loaded from current QASM file (works in both modes)"""
     try:
-        # Load configuration to find the QASM file
+        # Determine current QASM file: check config first, fallback to state
+        qasm_file = None
+
+        # Try to read from config (updated by control system or execute endpoint)
         config_path = FILES_DIR / "control" / "config.json"
-        config = {}
         if config_path.exists():
             try:
                 with open(config_path, 'r') as f:
                     config = json.load(f)
+                    qasm_file = config.get("qasm_file")
             except Exception:
                 pass
 
-        # Get QASM file from config or use default
-        qasm_file = config.get("qasm_file", "expt.qasm")
+        # Fallback to state
+        if not qasm_file:
+            with state_lock:
+                qasm_file = quantum_state.get("qasm_file", "expt.qasm")
 
         # Find and read the QASM file - check files/qasm/ first, then project root
         qasm_path = QASM_DIR / qasm_file
@@ -1086,7 +1085,7 @@ def _refresh_circuit_from_qasm_in_loop_mode():
             qasm_path = Path(__file__).parent / qasm_file
 
         if not qasm_path.exists():
-            return  # File not found, skip refresh
+            return False  # File not found
 
         # Read and load the circuit
         with open(qasm_path, 'r') as f:
@@ -1104,9 +1103,10 @@ def _refresh_circuit_from_qasm_in_loop_mode():
                     "gates": executor.circuit.size()
                 }
 
+        return True
+
     except Exception as e:
-        # Silently fail, keep existing circuit
-        pass
+        return False
 
 
 def build_quantum_args():
