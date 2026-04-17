@@ -730,11 +730,16 @@ def get_circuit_diagram():
         from io import BytesIO
         import base64
 
-        fig = executor.circuit.draw(output='mpl')
+        num_qubits = executor.circuit.num_qubits
+        # Scale width based on qubit count (0.3 inches per qubit, minimum 12)
+        width = max(12, num_qubits * 0.3)
+        height = max(8, num_qubits * 0.15 + 3)
+
+        fig = executor.circuit.draw(output='mpl', scale=0.7, figsize=(width, height))
 
         # Convert matplotlib figure to PNG base64
         buffer = BytesIO()
-        fig.savefig(buffer, format='png', bbox_inches='tight')
+        fig.savefig(buffer, format='png', bbox_inches='tight', dpi=100)
         buffer.seek(0)
         image_base64 = base64.b64encode(buffer.read()).decode()
 
@@ -810,9 +815,14 @@ def get_circuit_png():
 
     try:
         from io import BytesIO
-        fig = executor.circuit.draw(output='mpl')
+        num_qubits = executor.circuit.num_qubits
+        # Scale width based on qubit count (0.3 inches per qubit, minimum 12)
+        width = max(12, num_qubits * 0.3)
+        height = max(8, num_qubits * 0.15 + 3)
+
+        fig = executor.circuit.draw(output='mpl', scale=0.7, figsize=(width, height))
         buffer = BytesIO()
-        fig.savefig(buffer, format='png', bbox_inches='tight')
+        fig.savefig(buffer, format='png', bbox_inches='tight', dpi=100)
         buffer.seek(0)
         return send_file(buffer, mimetype='image/png', as_attachment=False)
     except Exception as e:
