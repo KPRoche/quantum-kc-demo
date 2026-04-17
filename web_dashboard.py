@@ -434,6 +434,8 @@ def execute_circuit():
 
         success = request_run(parameters, description)
         if success:
+            with state_lock:
+                quantum_state["qasm_file"] = qasm_file
             with job_lock:
                 job_store[job_id] = {
                     "job_id": job_id,
@@ -667,8 +669,10 @@ def qasm_active():
             if not executor.load_qasm(content):
                 return jsonify({"error": "Failed to parse QASM"}), 400
 
+            filename = data.get("name", "").strip() or quantum_state.get("qasm_file", "expt.qasm")
             with state_lock:
                 quantum_state["circuit_info"] = {
+                    "filename": filename,
                     "qubits": executor.circuit.num_qubits,
                     "gates": executor.circuit.size()
                 }
@@ -1067,6 +1071,15 @@ def _refresh_circuit_from_qasm_in_loop_mode():
 
         # Load into executor (this updates executor.circuit)
         executor.load_qasm(qasm_content)
+
+        with state_lock:
+            quantum_state["qasm_file"] = qasm_file
+            if executor.circuit:
+                quantum_state["circuit_info"] = {
+                    "filename": qasm_file,
+                    "qubits": executor.circuit.num_qubits,
+                    "gates": executor.circuit.size()
+                }
 
     except Exception as e:
         # Silently fail, keep existing circuit
@@ -1712,6 +1725,14 @@ def _execute_queued_job(job_id):
         # Load circuit
         if not executor.load_qasm(qasm_content):
             raise RuntimeError("Failed to parse QASM")
+
+        with state_lock:
+            if executor.circuit:
+                quantum_state["circuit_info"] = {
+                    "filename": qasm_file,
+                    "qubits": executor.circuit.num_qubits,
+                    "gates": executor.circuit.size()
+                }
 
         # Execute circuit
         result = executor.execute(backend, shots)
