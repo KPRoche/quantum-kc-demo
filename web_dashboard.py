@@ -795,6 +795,30 @@ def get_circuit_raw():
         return f"Error generating circuit: {str(e)}", 500, {'Content-Type': 'text/plain'}
 
 
+@app.route("/api/qasm/circuit/png", methods=["GET"])
+def get_circuit_png():
+    """Get circuit diagram as PNG binary image"""
+    if not executor.qiskit_available:
+        return jsonify({"error": "Qiskit not available"}), 503
+
+    # In loop mode, refresh the circuit from the current QASM file
+    _refresh_circuit_from_qasm_in_loop_mode()
+
+    with state_lock:
+        if not executor.circuit:
+            return jsonify({"error": "No circuit loaded yet"}), 400
+
+    try:
+        from io import BytesIO
+        fig = executor.circuit.draw(output='mpl')
+        buffer = BytesIO()
+        fig.savefig(buffer, format='png', bbox_inches='tight')
+        buffer.seek(0)
+        return send_file(buffer, mimetype='image/png', as_attachment=False)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/qasm/circuit/ascii", methods=["GET"])
 def get_circuit_ascii():
     """Get circuit diagram as ASCII art text drawing"""
