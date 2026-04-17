@@ -1056,11 +1056,10 @@ def _refresh_circuit_from_qasm_in_loop_mode():
         # Get QASM file from config or use default
         qasm_file = config.get("qasm_file", "expt.qasm")
 
-        # Find and read the QASM file
-        if qasm_file in PRESET_QASM_FILES:
+        # Find and read the QASM file - check files/qasm/ first, then project root
+        qasm_path = QASM_DIR / qasm_file
+        if not qasm_path.exists() and qasm_file in PRESET_QASM_FILES:
             qasm_path = Path(__file__).parent / qasm_file
-        else:
-            qasm_path = QASM_DIR / qasm_file
 
         if not qasm_path.exists():
             return  # File not found, skip refresh
@@ -1714,8 +1713,10 @@ def _execute_queued_job(job_id):
         with state_lock:
             quantum_state["qasm_file"] = qasm_file
 
-        # Load QASM file
-        qasm_path = Path(__file__).parent / qasm_file
+        # Load QASM file - check files/qasm/ first, then project root
+        qasm_path = QASM_DIR / qasm_file
+        if not qasm_path.exists() and qasm_file in PRESET_QASM_FILES:
+            qasm_path = Path(__file__).parent / qasm_file
         if not qasm_path.exists():
             raise FileNotFoundError(f"QASM file not found: {qasm_file}")
 
