@@ -419,6 +419,10 @@ def execute_circuit():
     if qasm_file and qasm_file != "expt.qasm":
         parameters.append(f"-f:{qasm_file}")
 
+    # Add shots parameter if specified
+    if shots and shots != 10:
+        parameters.append(f"-shots:{shots}")
+
     job_id = str(uuid.uuid4())
     description = f"Execute {qasm_file} on {backend} backend"
 

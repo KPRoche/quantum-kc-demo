@@ -141,10 +141,11 @@ except ImportError:
     print("       ....(quantum_control module not available - running in CLI mode only)")
     CONTROL_ENABLED = False
 print("       ....qiskit QiskitRuntimeService")
-from qiskit_ibm_runtime import QiskitRuntimeService, accounts            # classes for accessing IBM Quantum online services
+from qiskit_ibm_runtime import QiskitRuntimeService, accounts, SamplerV2            # classes for accessing IBM Quantum online services
 from qiskit_ibm_runtime.accounts.exceptions import AccountNotFoundError   # to handle missing account info
 print("       ....QuantumCircuit and transpile")
 from qiskit import QuantumCircuit, transpile, qiskit
+from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
 from qiskit.providers import JobStatus
 print("     .....simple local emulator (fakeManila)")
 from qiskit_ibm_runtime.fake_provider import FakeManilaV2
@@ -181,6 +182,7 @@ backendparm = '[localsim]'
 SelectBackend = False #for interactive selection of backend
 fake_name = "FakeManilaV2"
 qubits_needed = 5  #default size for the five-qubit simulation
+num_shots = 50 #default number of shots for jobs
 AddNoise = False
 debug = False
 qasmfileinput='expt.qasm'
@@ -607,7 +609,7 @@ def showqubits(pattern='0000000000000000'):
 #------------------------------------------------------
 
 def blinky(time=20,experimentID=''):
-   global pixels,hues,experiment, Qlogo, showlogo, QArcs, QKLogo, QHex, qubits, qubitpattern
+   global pixels,hues,experiment, Qlogo, showlogo, QArcs, QKLogo, QHex, qubits, qubitpattern, qdone
    if QWhileThinking:
        mask = QKLogo_mask
    else:
@@ -635,7 +637,7 @@ def blinky(time=20,experimentID=''):
              else:
                 pixels[p]=[0,0,0]
       if (result is not None):
-         if (result.status=='COMPLETED'):
+         if qdone: #if (result.status=='COMPLETED'): qdone exists, samplerv2 primitive result.status doesn't exist
             GoNow=True
     # Update the display
       if not showlogo:
@@ -782,8 +784,9 @@ def execute_circuit_once(qcirc, qasm_circuit_obj):
 
         # Transpile circuit
         try:
-            qk1_circ = transpile(qcirc, Q)
-            print("transpilation complete")
+            pm = generate_preset_pass_manager(backend=Q, optimization_level=1)
+            qk1_circ = pm.run(qcirc) # two steps sets us up to use SamplerV2
+            #qk1_circ=transpile(qcirc, Q) # transpile for the new primitive
         except:
             print("problem transpiling circuit")
             return None
@@ -796,7 +799,8 @@ def execute_circuit_once(qcirc, qasm_circuit_obj):
 
         # Run the job
         print("running job")
-        qjob = Q.run(qk1_circ)
+        sampler = SamplerV2(mode=Q)
+        qjob = sampler.run([qk1_circ], shots=num_shots)# qjob = Q.run(qk1_circ)
         print("JobID: ", qjob.job_id())
         print("Job Done?", qjob.done())
 
@@ -818,7 +822,9 @@ def execute_circuit_once(qcirc, qasm_circuit_obj):
         # Process results
         try:
             result = qjob.result()
-            counts = result.get_counts(qasm_circuit_obj)
+            creg_name = qcirc.cregs[0].name              # e.g., 'c' for all built-in QASM files
+            counts = getattr(result[0].data, creg_name).get_counts()
+            # counts = result.get_counts(qasm_circuit_obj)
             maxpattern = max(counts, key=counts.get)
             qubitpattern = maxpattern
             maxvalue = counts[maxpattern]
@@ -1292,6 +1298,14 @@ if (len(sys.argv)>1):
                     qasmfileinput = value  # if the key is -f, specify the qasm file
                     print("-f option: filename",qasmfileinput)
                     print ("QASM File input",qasmfileinput)
+                elif '-shots' in token:
+                    try:
+                        shots_val = int(value)
+                        if 0 < shots_val < 1025:
+                            num_shots = shots_val
+                            print(f"-shots option: {num_shots}")
+                    except ValueError:
+                        print(f"Invalid shots value: {value}, using default {num_shots}")
                 elif '-nois' in token: fake_name = value
             if debug: input("press Enter to continue")
              
