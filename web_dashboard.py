@@ -420,7 +420,7 @@ def execute_circuit():
         parameters.append(f"-f:{qasm_file}")
 
     # Add shots parameter if specified
-    if shots and shots != 10:
+    if shots is not None:
         parameters.append(f"-shots:{shots}")
 
     job_id = str(uuid.uuid4())
