@@ -842,7 +842,7 @@ def execute_circuit_once(qcirc, qasm_circuit_obj):
                     "pattern": maxpattern,
                     "counts": dict(counts),
                     "num_qubits": len(maxpattern),
-                    "shots": sum(counts.values()),
+                    "shots": num_shots,
                     "timestamp": datetime.now().isoformat(),
                     "backend": backendparm,
                 }

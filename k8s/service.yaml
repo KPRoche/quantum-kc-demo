@@ -1,15 +1,17 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: quantum-raspberry-tie
+  name: quantum-kc-demo
+  namespace: quantum
   labels:
-    app: quantum-raspberry-tie
+    app: quantum-kc-demo
 spec:
   selector:
-    app: quantum-raspberry-tie
+    app: quantum-kc-demo
   ports:
   - name: http
     port: 80
     targetPort: 5000
+    nodePort: 30500
     protocol: TCP
-  type: ClusterIP
+  type: NodePort
