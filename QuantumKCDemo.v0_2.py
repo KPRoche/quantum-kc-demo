@@ -1607,6 +1607,14 @@ while outer_control_loop:
                     loop_mode = _config.get("loop_mode", False)
                     loop_iterations = _config.get("loop_iterations", 1)
                     qasmfileinput = _config.get("qasm_file", "")
+                    _shots = _config.get("shots")
+                    if _shots is not None:
+                        try:
+                            num_shots = int(_shots)
+                            if num_shots > 0:
+                                print(f"[CONFIG] Updated shots to {num_shots}")
+                        except (ValueError, TypeError):
+                            print(f"[CONFIG] Invalid shots value in config: {_shots}")
             else:
                 # First iteration without config = single execution
                 if iteration > 1:
