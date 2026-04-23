@@ -1527,146 +1527,146 @@ while outer_control_loop:
         qasmfilename = find_qasm_file(qasmfileinput)
     
     
-    # ------------------- Step 4. Instantiate our display thread and our backend
-    
-    #        -- (Note that we turned on the display itself earlier; this creates an object we can launch in a parallel thread)
-    
-    # Instantiate a FRESH instance of our glow class for each execution
-    # (Previous instance may have already run its thread, making it unusable for restart)
-    print("Instantiating glow...")
-    if NoHat:
-        # Running in container or headless environment - use no-op glow
-        print("  (no-op mode - no display hardware detected)")
-        glowing = glowNoOp()
-    else:
-        glowing = glow()
-    # create the html shell file
-    write_svg_file(pixels, maxpattern, 2.5, True)
-    
-    
-    # ------------------- Step 5. Read our input file create the circuit, and confirm how many qubits we need
-    #							if it is more than specified in the command line, adjust!
-     
-    exptfile = open(qasmfilename,'r') # open the file with the OPENQASM code in it
-    qasm= exptfile.read()            # read the contents into our experiment string
-    
-    if (len(qasm)<5):                # if that is too short to be real, exit
-        exit
-    else:                            # otherwise print it to the console for reference
-        print("OPENQASM code to send:\n",qasm)
-    
-    # ------------------ Step 6. Instantiate our Quantum Service !
-    
-    #to determin the number of qubits, we have to make the circuit
+        # ------------------- Step 4. Instantiate our display thread and our backend
         
-    qcirc=QuantumCircuit.from_qasm_str(qasm)   
-    qubits_needed = qcirc.num_qubits
-    
-    # Create a fresh thread for each execution (old thread may have already finished from previous run)
-    rainbowTie = Thread(target=glowing.run, daemon=False)  # instantiate the display thread
-    StartQuantumService()                                # try to connect and instantiate the IBMQ 
-    
-    qcirc=QuantumCircuit.from_qasm_str(qasm)   
-    
-    # -------------------- Step 7. draw the circuit on the terminal and adjust the display settings if necessary
-    try:
-        print("generating circuit from QASM")# (qcirc)
-    except UnicodeEncodeError:
-        print ('Unable to render quantum circuit drawing; incompatible Unicode environment')
-    except:
-        print ('Unable to render quantum circuit drawing for some reason')
+        #        -- (Note that we turned on the display itself earlier; this creates an object we can launch in a parallel thread)
         
-    try:
-        rainbowTie.start()                          # start the display thread
-    except RuntimeError as e:
-        # Thread was already started in a previous run - create a new one
-        print(f"[WARNING] Could not start display thread: {e}")
-        print("[WARNING] Creating fresh display thread...")
-        rainbowTie = Thread(target=glowing.run, daemon=False)
+        # Instantiate a FRESH instance of our glow class for each execution
+        # (Previous instance may have already run its thread, making it unusable for restart)
+        print("Instantiating glow...")
+        if NoHat:
+            # Running in container or headless environment - use no-op glow
+            print("  (no-op mode - no display hardware detected)")
+            glowing = glowNoOp()
+        else:
+            glowing = glow()
+        # create the html shell file
+        write_svg_file(pixels, maxpattern, 2.5, True)
+        
+        
+        # ------------------- Step 5. Read our input file create the circuit, and confirm how many qubits we need
+        #							if it is more than specified in the command line, adjust!
+         
+        exptfile = open(qasmfilename,'r') # open the file with the OPENQASM code in it
+        qasm= exptfile.read()            # read the contents into our experiment string
+        
+        if (len(qasm)<5):                # if that is too short to be real, exit
+            exit
+        else:                            # otherwise print it to the console for reference
+            print("OPENQASM code to send:\n",qasm)
+        
+        # ------------------ Step 6. Instantiate our Quantum Service !
+        
+        #to determin the number of qubits, we have to make the circuit
+            
+        qcirc=QuantumCircuit.from_qasm_str(qasm)   
+        qubits_needed = qcirc.num_qubits
+        
+        # Create a fresh thread for each execution (old thread may have already finished from previous run)
+        rainbowTie = Thread(target=glowing.run, daemon=False)  # instantiate the display thread
+        StartQuantumService()                                # try to connect and instantiate the IBMQ 
+        
+        qcirc=QuantumCircuit.from_qasm_str(qasm)   
+        
+        # -------------------- Step 7. draw the circuit on the terminal and adjust the display settings if necessary
         try:
-            rainbowTie.start()
-        except Exception as e2:
-            print(f"[ERROR] Failed to start replacement thread: {e2}")
-
-    #---------------------- Step 8: START YOUR ENGINES -- everything is set up, lets run our job (and loop)
-
-    # Execute the circuit (inline for control mode, loop for loop mode)
-    runcounter += 1
-
-    # Loop mode: re-read config on each iteration to allow dynamic adjustments
-    iteration = 0
-    while True:
-        iteration += 1
-
-        # Re-read config for each iteration to pick up changes
-        try:
-            _config_path = Path(os.environ.get("CONTROL_DIR", "/app/files/control")) / "config.json"
-            if _config_path.exists():
-                with open(_config_path, 'r') as _f:
-                    _config = json.load(_f)
-                    loop_mode = _config.get("loop_mode", False)
-                    loop_iterations = _config.get("loop_iterations", 1)
-                    qasmfileinput = _config.get("qasm_file", "")
-                    _shots = _config.get("shots")
-                    if _shots is not None:
-                        try:
-                            num_shots = int(_shots)
-                            if num_shots > 0:
-                                print(f"[CONFIG] Updated shots to {num_shots}")
-                        except (ValueError, TypeError):
-                            print(f"[CONFIG] Invalid shots value in config: {_shots}")
-            else:
-                # First iteration without config = single execution
-                if iteration > 1:
-                    print("[LOOP] Config file missing, stopping")
-                    break
-                loop_mode = False
-                loop_iterations = 1
-                qasmfileinput = ""
-        except Exception as _e:
-            print(f"[CONTROL] Error reading config: {_e}")
-            break
-
-        if iteration > 1:
-            print(f"\n[LOOP] Iteration {iteration}/{loop_iterations if loop_iterations > 1 else 'single'}")
-
-        # Find and load QASM file for this iteration
-        qasmfilename = find_qasm_file(qasmfileinput)
-
-        # Read QASM and create circuit
-        exptfile = open(qasmfilename, 'r')
-        qasm = exptfile.read()
-        exptfile.close()
-
-        if len(qasm) < 5:
-            print("[ERROR] QASM file is too short or empty")
-            break
-
-        print("OPENQASM code:\n", qasm)
-
-        # Create circuit from QASM
-        qasm_circuit_obj = QuantumCircuit.from_qasm_str(qasm)
-        qubits_needed = qasm_circuit_obj.num_qubits
-
-        # Configure display mask based on current circuit
-        qubitpattern = config_display_mask()
-
-        # Execute the circuit (do this BEFORE checking loop_mode)
-        result = execute_circuit_once(qasm_circuit_obj, qasm_circuit_obj)
-
-        # After execution, check if we should continue looping
-        if not loop_mode or iteration >= loop_iterations:
-            print(f"[LOOP] Execution complete (loop_mode={loop_mode}, iterations={iteration}/{loop_iterations})")
-            break
-
-        # Wait before next iteration
-        wait_interval = 5
-        try:
-            wait_interval = int(os.environ.get("LOOP_INTERVAL", "5"))
+            print("generating circuit from QASM")# (qcirc)
+        except UnicodeEncodeError:
+            print ('Unable to render quantum circuit drawing; incompatible Unicode environment')
         except:
-            pass
-        print(f"[LOOP] Waiting {wait_interval}s before next iteration...")
-        sleep(wait_interval)
+            print ('Unable to render quantum circuit drawing for some reason')
+            
+        try:
+            rainbowTie.start()                          # start the display thread
+        except RuntimeError as e:
+            # Thread was already started in a previous run - create a new one
+            print(f"[WARNING] Could not start display thread: {e}")
+            print("[WARNING] Creating fresh display thread...")
+            rainbowTie = Thread(target=glowing.run, daemon=False)
+            try:
+                rainbowTie.start()
+            except Exception as e2:
+                print(f"[ERROR] Failed to start replacement thread: {e2}")
+
+        #---------------------- Step 8: START YOUR ENGINES -- everything is set up, lets run our job (and loop)
+
+        # Execute the circuit (inline for control mode, loop for loop mode)
+        runcounter += 1
+
+        # Loop mode: re-read config on each iteration to allow dynamic adjustments
+        iteration = 0
+        while True:
+            iteration += 1
+
+            # Re-read config for each iteration to pick up changes
+            try:
+                _config_path = Path(os.environ.get("CONTROL_DIR", "/app/files/control")) / "config.json"
+                if _config_path.exists():
+                    with open(_config_path, 'r') as _f:
+                        _config = json.load(_f)
+                        loop_mode = _config.get("loop_mode", False)
+                        loop_iterations = _config.get("loop_iterations", 1)
+                        qasmfileinput = _config.get("qasm_file", "")
+                        _shots = _config.get("shots")
+                        if _shots is not None:
+                            try:
+                                num_shots = int(_shots)
+                                if num_shots > 0:
+                                    print(f"[CONFIG] Updated shots to {num_shots}")
+                            except (ValueError, TypeError):
+                                print(f"[CONFIG] Invalid shots value in config: {_shots}")
+                else:
+                    # First iteration without config = single execution
+                    if iteration > 1:
+                        print("[LOOP] Config file missing, stopping")
+                        break
+                    loop_mode = False
+                    loop_iterations = 1
+                    qasmfileinput = ""
+            except Exception as _e:
+                print(f"[CONTROL] Error reading config: {_e}")
+                break
+
+            if iteration > 1:
+                print(f"\n[LOOP] Iteration {iteration}/{loop_iterations if loop_iterations > 1 else 'single'}")
+
+            # Find and load QASM file for this iteration
+            qasmfilename = find_qasm_file(qasmfileinput)
+
+            # Read QASM and create circuit
+            exptfile = open(qasmfilename, 'r')
+            qasm = exptfile.read()
+            exptfile.close()
+
+            if len(qasm) < 5:
+                print("[ERROR] QASM file is too short or empty")
+                break
+
+            print("OPENQASM code:\n", qasm)
+
+            # Create circuit from QASM
+            qasm_circuit_obj = QuantumCircuit.from_qasm_str(qasm)
+            qubits_needed = qasm_circuit_obj.num_qubits
+
+            # Configure display mask based on current circuit
+            qubitpattern = config_display_mask()
+
+            # Execute the circuit (do this BEFORE checking loop_mode)
+            result = execute_circuit_once(qasm_circuit_obj, qasm_circuit_obj)
+
+            # After execution, check if we should continue looping
+            if not loop_mode or iteration >= loop_iterations:
+                print(f"[LOOP] Execution complete (loop_mode={loop_mode}, iterations={iteration}/{loop_iterations})")
+                break
+
+            # Wait before next iteration
+            wait_interval = 5
+            try:
+                wait_interval = int(os.environ.get("LOOP_INTERVAL", "5"))
+            except:
+                pass
+            print(f"[LOOP] Waiting {wait_interval}s before next iteration...")
+            sleep(wait_interval)
 
     # After the execution loop completes, mark command as complete and return to waiting state
         if outer_control_loop:
