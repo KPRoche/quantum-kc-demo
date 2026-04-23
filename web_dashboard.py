@@ -95,7 +95,7 @@ quantum_state = {
     "status": "ready",
     "message": "",
     "circuit_info": None,
-    "backend_info": None,
+    "backend_info": {"name": "aer", "shots": 10},
     "loop_mode": False,
     "qasm_file": "expt.qasm"
 }
@@ -428,11 +428,11 @@ def execute_circuit():
 
     # If control system is enabled, send command to quantum process
     if CONTROL_ENABLED:
-        # Write config.json with qasm_file and loop_mode so subprocess can read it
+        # Write config.json with qasm_file, shots, and loop_mode so subprocess can read it
         config_path = FILES_DIR / "control" / "config.json"
         try:
             with open(config_path, 'w') as f:
-                json.dump({"qasm_file": qasm_file, "loop_mode": False}, f)
+                json.dump({"qasm_file": qasm_file, "shots": shots, "loop_mode": False}, f)
         except Exception as e:
             print(f"Warning: Could not write config.json: {e}")
 
@@ -1175,6 +1175,16 @@ def build_quantum_args():
     if qasm_file:
         args.append(f"-f:{qasm_file}")
 
+    # Shots parameter (if specified)
+    shots = config.get("shots")
+    if shots is not None:
+        try:
+            shots_val = int(shots)
+            if 0 < shots_val < 1025:
+                args.append(f"-shots:{shots_val}")
+        except (ValueError, TypeError):
+            pass
+
     # Additional boolean flags
     if config.get("no_logo"):
         args.append("-noq")
@@ -1689,6 +1699,9 @@ def loop_process_monitor():
                         with state_lock:
                             quantum_state["last_result"] = result_data
                             quantum_state["last_result_time"] = result_data.get("timestamp")
+                            # Update backend_info with shots from loop result
+                            if "shots" in result_data:
+                                quantum_state["backend_info"] = {"name": result_data.get("backend", "aer"), "shots": result_data["shots"]}
                         last_result_mtime = mtime
                     except Exception as e:
                         print(f"Error reading loop result file: {e}")
