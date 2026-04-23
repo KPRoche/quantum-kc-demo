@@ -1200,8 +1200,7 @@ def build_quantum_args():
 
 @app.route("/api/loop/start", methods=["POST"])
 def start_loop_mode():
-    """Start continuous loop mode"""
-    global loop_process
+    """Start continuous loop mode via control system"""
 
     # Log entry
     try:
@@ -1222,113 +1221,118 @@ def start_loop_mode():
         quantum_state["status"] = "starting_loop"
         quantum_state["message"] = "Starting loop mode..."
 
-    # Acquire loop_lock before spawning subprocess
-    with loop_lock:
-        try:
-            # Ensure /app/files/control directory exists for IPC
-            control_dir = FILES_DIR / "control"
-            control_dir.mkdir(exist_ok=True, mode=0o777)
+    try:
+        # Ensure /app/files/control directory exists for IPC
+        control_dir = FILES_DIR / "control"
+        control_dir.mkdir(exist_ok=True, mode=0o777)
 
-            # Start the quantum program with loop mode
-            # Try qapp.py first (standard name in container), then QuantumKCDemo.v0_2.py (development)
-            app_path = Path(__file__).parent / "qapp.py"
-            if not app_path.exists():
-                app_path = Path(__file__).parent / "QuantumKCDemo.v0_2.py"
-
-            # Build arguments from saved configuration
-            cmd_args = ["python3", str(app_path)]
-            custom_args = build_quantum_args()
-            # Add -loop flag to run in pure loop mode (bypasses control system)
-            custom_args.append("-loop")
-            debug_log = FILES_DIR / "debug.log"
-            with open(debug_log, "a") as f:
-                f.write(f"Custom args from build_quantum_args: {custom_args}\n")
-            cmd_args.extend(custom_args)
-
-            # Set up environment to ensure SVG output goes to the Flask svg directory
-            env = os.environ.copy()
-            env["SVG_OUTPUT_DIR"] = str(SVG_DIR)
-            env["QUANTUM_FILES_DIR"] = str(FILES_DIR)
-
-            with open(debug_log, "a") as f:
-                f.write(f"Starting loop process with args: {cmd_args}\n")
-                f.write(f"SVG_OUTPUT_DIR set to: {SVG_DIR}\n")
-                f.write(f"App path exists: {app_path.exists()}\n")
-
-            loop_process = subprocess.Popen(
-                cmd_args,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                text=True,
-                env=env
-            )
-
-            with open(debug_log, "a") as f:
-                f.write(f"Loop process started with PID: {loop_process.pid}\n")
-
-            # Set loop_mode = True only after Popen succeeds
-            with state_lock:
-                quantum_state["loop_mode"] = True
-                quantum_state["status"] = "loop_running"
-                quantum_state["message"] = "Loop mode active - continuously executing quantum circuits"
-
-            return jsonify({"status": "loop_started", "message": "Quantum program running in loop mode"})
-
-        except Exception as e:
-            import traceback
-            import sys
-            error_msg = f"Failed to start loop mode: {str(e)}\n{traceback.format_exc()}"
-            print(error_msg, file=sys.stderr, flush=True)
+        # Write loop configuration to config.json so the running quantum app can read it
+        config_path = control_dir / "config.json"
+        config = {}
+        if config_path.exists():
             try:
-                with open(FILES_DIR / "debug.log", "a") as f:
-                    f.write(f"EXCEPTION: {error_msg}\n")
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
             except:
                 pass
-            with state_lock:
-                quantum_state["status"] = "error"
-                quantum_state["message"] = error_msg
-            loop_process = None
-            return jsonify({"error": str(e)}), 500
+
+        # Get loop iterations from request or default to infinite (0 means keep looping)
+        request_data = request.json or {}
+        loop_iterations = request_data.get("loop_iterations", 0)
+        if loop_iterations <= 0:
+            loop_iterations = 999999  # Effectively infinite
+
+        # Update config with loop parameters
+        config["loop_mode"] = True
+        config["loop_iterations"] = loop_iterations
+
+        with open(config_path, 'w') as f:
+            json.dump(config, f)
+
+        debug_log = FILES_DIR / "debug.log"
+        with open(debug_log, "a") as f:
+            f.write(f"Wrote loop config: loop_mode=True, loop_iterations={loop_iterations}\n")
+
+        # If control system is enabled, send a run command to start the loop
+        if CONTROL_ENABLED:
+            try:
+                from quantum_control import request_run, get_status
+
+                # Build parameters from saved configuration
+                custom_args = build_quantum_args()
+                description = f"Start loop mode: {loop_iterations} iterations"
+
+                request_run(custom_args, description)
+
+                with open(debug_log, "a") as f:
+                    f.write(f"Sent loop mode command to control system\n")
+            except Exception as e:
+                with open(debug_log, "a") as f:
+                    f.write(f"Error sending control command: {e}\n")
+                raise
+
+        # Set loop_mode = True in our state
+        with state_lock:
+            quantum_state["loop_mode"] = True
+            quantum_state["status"] = "loop_running"
+            quantum_state["message"] = "Loop mode active - continuously executing quantum circuits"
+
+        return jsonify({"status": "loop_started", "message": "Quantum program running in loop mode"})
+
+    except Exception as e:
+        import traceback
+        import sys
+        error_msg = f"Failed to start loop mode: {str(e)}\n{traceback.format_exc()}"
+        print(error_msg, file=sys.stderr, flush=True)
+        try:
+            with open(FILES_DIR / "debug.log", "a") as f:
+                f.write(f"EXCEPTION: {error_msg}\n")
+        except:
+            pass
+        with state_lock:
+            quantum_state["status"] = "error"
+            quantum_state["message"] = error_msg
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/loop/stop", methods=["POST"])
 def stop_loop_mode():
     """Stop continuous loop mode"""
-    global loop_process
 
     with state_lock:
         if not quantum_state["loop_mode"]:
             return jsonify({"error": "Loop mode not running"}), 409
 
-    # Acquire loop_lock around process terminate/kill sequence
-    with loop_lock:
-        try:
-            if loop_process:
-                # Check if process is still running
-                if loop_process.poll() is None:
-                    # Process is still running, terminate it
-                    loop_process.terminate()
-                    try:
-                        loop_process.wait(timeout=5)
-                    except subprocess.TimeoutExpired:
-                        loop_process.kill()
-                        loop_process.wait()
-                # If process already exited (poll() is not None), just clean up state
+    try:
+        # Write loop_mode: false to config so the running quantum app stops after current iteration
+        config_path = FILES_DIR / "control" / "config.json"
+        config = {}
+        if config_path.exists():
+            try:
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+            except:
+                pass
 
-            # Clean up state
-            with state_lock:
-                quantum_state["loop_mode"] = False
-                quantum_state["status"] = "stopped"
-                quantum_state["message"] = "Loop mode stopped"
+        config["loop_mode"] = False
+        config["loop_iterations"] = 1
 
-            loop_process = None
-            return jsonify({"status": "loop_stopped", "message": "Quantum program stopped"})
+        with open(config_path, 'w') as f:
+            json.dump(config, f)
 
-        except Exception as e:
-            with state_lock:
-                quantum_state["status"] = "error"
-                quantum_state["message"] = f"Error stopping loop: {str(e)}"
-            return jsonify({"error": str(e)}), 500
+        # Clean up state
+        with state_lock:
+            quantum_state["loop_mode"] = False
+            quantum_state["status"] = "stopped"
+            quantum_state["message"] = "Loop mode stopped"
+
+        return jsonify({"status": "loop_stopped", "message": "Loop mode stopped - quantum app will finish current iteration"})
+
+    except Exception as e:
+        with state_lock:
+            quantum_state["status"] = "error"
+            quantum_state["message"] = f"Error stopping loop: {str(e)}"
+        return jsonify({"error": str(e)}), 500
 
 
 def generate_result_svg(result):
