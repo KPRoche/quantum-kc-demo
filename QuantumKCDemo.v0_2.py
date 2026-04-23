@@ -1668,14 +1668,10 @@ while outer_control_loop:
         print(f"[LOOP] Waiting {wait_interval}s before next iteration...")
         sleep(wait_interval)
 
-        # Mark the command as complete and return to waiting state
+    # After the execution loop completes, mark command as complete and return to waiting state
         if outer_control_loop:
             print("\n[CONTROL] Circuit execution complete.")
             command_complete()
-        # If outer_control_loop is True, the while loop continues to wait for next command
-        # If False (CLI mode), break out of the outer loop
-        else:
-            break
 
     else:
         print(f"[CONTROL] Unknown command: {cmd.get('command')}")
