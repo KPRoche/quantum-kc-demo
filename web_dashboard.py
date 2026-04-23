@@ -1237,7 +1237,7 @@ def start_loop_mode():
                 pass
 
         # Get loop iterations from request or default to infinite (0 means keep looping)
-        request_data = request.json or {}
+        request_data = request.get_json(force=True, silent=True) or {}
         loop_iterations = request_data.get("loop_iterations", 0)
         if loop_iterations <= 0:
             loop_iterations = 999999  # Effectively infinite
