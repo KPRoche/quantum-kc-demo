@@ -838,6 +838,10 @@ def execute_circuit_once(qcirc, qasm_circuit_obj):
             print("[DEBUG] About to write result file...")
             try:
                 RESULT_FILE = Path(os.environ.get("CONTROL_DIR", "/app/files/control")) / "result.json"
+                # Create a unique sequence number combining runcounter and iteration
+                # to track result changes even with rapid iterations
+                execution_sequence = runcounter * 10000 + iteration
+
                 result_data = {
                     "pattern": maxpattern,
                     "counts": dict(counts),
@@ -845,6 +849,7 @@ def execute_circuit_once(qcirc, qasm_circuit_obj):
                     "shots": num_shots,
                     "timestamp": datetime.now().isoformat(),
                     "backend": backendparm,
+                    "execution_sequence": execution_sequence,
                 }
                 temp = RESULT_FILE.with_suffix(".tmp")
                 with open(temp, "w") as f:

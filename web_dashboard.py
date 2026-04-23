@@ -1672,7 +1672,7 @@ def stale_node_reaper():
 def loop_process_monitor():
     """Monitor loop process and reset state if it exits unexpectedly. Also poll for result updates."""
     CHECK_INTERVAL = 2
-    last_result_mtime = 0
+    last_result_sequence = -1
 
     while True:
         try:
@@ -1691,20 +1691,27 @@ def loop_process_monitor():
 
             # Poll result file for new data from loop subprocess
             if LOOP_RESULT_FILE.exists():
-                mtime = LOOP_RESULT_FILE.stat().st_mtime
-                if mtime > last_result_mtime:
-                    try:
-                        with open(LOOP_RESULT_FILE) as f:
-                            result_data = json.load(f)
+                try:
+                    with open(LOOP_RESULT_FILE) as f:
+                        result_data = json.load(f)
+
+                    # Check if this is a new execution (sequence number changed)
+                    current_sequence = result_data.get("execution_sequence", -1)
+
+                    if current_sequence > last_result_sequence:
                         with state_lock:
                             quantum_state["last_result"] = result_data
                             quantum_state["last_result_time"] = result_data.get("timestamp")
                             # Update backend_info with shots from loop result
                             if "shots" in result_data:
                                 quantum_state["backend_info"] = {"name": result_data.get("backend", "aer"), "shots": result_data["shots"]}
-                        last_result_mtime = mtime
-                    except Exception as e:
-                        print(f"Error reading loop result file: {e}")
+
+                        last_result_sequence = current_sequence
+                        print(f"[LOOP] Result updated: execution #{current_sequence}")
+                except json.JSONDecodeError:
+                    print(f"[LOOP] Error decoding result file (partial write?)", file=sys.stderr)
+                except Exception as e:
+                    print(f"[LOOP] Error reading result file: {e}", file=sys.stderr)
 
             time.sleep(CHECK_INTERVAL)
         except Exception as e:
