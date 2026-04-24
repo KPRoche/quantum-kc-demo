@@ -186,6 +186,7 @@ num_shots = 50 #default number of shots for jobs
 AddNoise = False
 debug = False
 qasmfileinput='expt.qasm'
+real_backend_name = None  # Track real backend used for noise models
 scriptfolder = os.path.dirname(os.path.realpath(__file__))
 
 #---------------------- GRAPHICS constants and functions-------------------------------------------
@@ -773,7 +774,7 @@ def find_qasm_file(qasmfileinput):
 
 def execute_circuit_once(qcirc, qasm_circuit_obj):
     """Execute a single quantum circuit and return results"""
-    global Q, thinking, maxpattern, qubitpattern, runcounter, Qname, UseLocal, backendparm
+    global Q, thinking, maxpattern, qubitpattern, runcounter, Qname, UseLocal, backendparm, real_backend_name
 
     try:
         print('executing quantum circuit... on ', Q.name)
@@ -842,13 +843,18 @@ def execute_circuit_once(qcirc, qasm_circuit_obj):
                 # to track result changes even with rapid iterations
                 execution_sequence = runcounter * 10000 + iteration
 
+                backend_display = backendparm
+                if real_backend_name:
+                    backend_display = f"aer_noise[{real_backend_name}]"
+
                 result_data = {
                     "pattern": maxpattern,
                     "counts": dict(counts),
                     "num_qubits": len(maxpattern),
                     "shots": num_shots,
                     "timestamp": datetime.now().isoformat(),
-                    "backend": backendparm,
+                    "backend": backend_display,
+                    "backend_type": "noise_model" if real_backend_name else "simulator" if "aer" in backendparm else "real",
                     "execution_sequence": execution_sequence,
                 }
                 temp = RESULT_FILE.with_suffix(".tmp")
@@ -916,7 +922,7 @@ def ping(website='https://quantum.cloud.ibm.com/',repeats=1,wait=0.5,verbose=Fal
 #       If we get a 200 response, the site is live and we initialize our connection to it
 #-------------------------------------------------------------------------------
 def StartQuantumService():
-    global Q, backend, UseLocal, backendparm
+    global Q, backend, UseLocal, backendparm, real_backend_name
     # This version written to work only with the new QiskitRuntimeService module from Qiskit > v1.0
     sQPV = IBMQVersion
     pd = '.'
@@ -1026,10 +1032,12 @@ def StartQuantumService():
                         print("getting a real backend connection for aer model")
                         real_backend = Qservice.least_busy(simulator=False)#operational=True, backend("ibm_brisbane")
                         print("creating AerSimulator modeled from ",real_backend.name)
+                        real_backend_name = real_backend.name
                         Q = AerSimulator.from_backend(real_backend)
                     else:
                         print("creating basic Aer Simulator")
-                        Q = AerSimulator(n_qubits=qubits_needed)    
+                        real_backend_name = None
+                        Q = AerSimulator(n_qubits=qubits_needed)
                     UseLocal=True  #now that it's built, mark the backend as local
                 else:
                     try:
@@ -1071,6 +1079,7 @@ def apply_parameters(parameter_list):
     """
     global UseLocal, UseNeo, NeoTiled, backendparm, SelectBackend, UseTee, UseHex, UseQ16
     global UseEmulator, UseFaux, DualDisplay, AddNoise, debug, qasmfileinput, qubits_needed, LoopModeFlag
+    global real_backend_name
 
     # Reset to defaults
     UseLocal = True

@@ -95,7 +95,7 @@ quantum_state = {
     "status": "ready",
     "message": "",
     "circuit_info": None,
-    "backend_info": {"name": "aer", "shots": 10},
+    "backend_info": {"name": "aer", "shots": 10, "type": "simulator"},
     "loop_mode": False,
     "qasm_file": "expt.qasm"
 }
@@ -1706,9 +1706,13 @@ def loop_process_monitor():
                         with state_lock:
                             quantum_state["last_result"] = result_data
                             quantum_state["last_result_time"] = result_data.get("timestamp")
-                            # Update backend_info with shots from loop result
+                            # Update backend_info with shots and type from loop result
                             if "shots" in result_data:
-                                quantum_state["backend_info"] = {"name": result_data.get("backend", "aer"), "shots": result_data["shots"]}
+                                quantum_state["backend_info"] = {
+                                    "name": result_data.get("backend", "aer"),
+                                    "shots": result_data["shots"],
+                                    "type": result_data.get("backend_type", "simulator")
+                                }
 
                         last_result_sequence = current_sequence
                         print(f"[LOOP] Result updated: execution #{current_sequence}")
@@ -1817,7 +1821,15 @@ def _execute_queued_job(job_id):
                 quantum_state["last_result_time"] = datetime.now().isoformat()
                 quantum_state["status"] = "success"
                 quantum_state["message"] = "Circuit executed successfully"
-                quantum_state["backend_info"] = {"name": backend, "shots": shots}
+                # Determine backend type
+                backend_type = "simulator"
+                if "least" in backend:
+                    backend_type = "real"
+                elif "aer_noise" in backend:
+                    backend_type = "noise_model"
+                elif backend not in ("aer", "sim"):
+                    backend_type = "real"
+                quantum_state["backend_info"] = {"name": backend, "shots": shots, "type": backend_type}
 
             # Record metrics
             duration = time.monotonic() - t0
