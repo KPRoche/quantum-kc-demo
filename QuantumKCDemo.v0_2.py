@@ -845,7 +845,7 @@ def execute_circuit_once(qcirc, qasm_circuit_obj):
 
                 backend_display = backendparm
                 if real_backend_name:
-                    backend_display = f"aer_noise[{real_backend_name}]"
+                    backend_display = f"aer.{real_backend_name}"
 
                 result_data = {
                     "pattern": maxpattern,
