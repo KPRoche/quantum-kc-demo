@@ -408,10 +408,15 @@ def execute_circuit():
 
     # Map backend to quantum app parameters
     if backend and backend != "local":
-        if "aer" in backend.lower():
+        backend_lower = backend.lower()
+        if backend_lower in ("aer_noise", "aer_model", "model"):
+            parameters.append("-b:aer_noise")
+        elif backend_lower == "aer":
             parameters.append("-b:aer")
-        elif "least" in backend.lower():
+        elif "least" in backend_lower:
             parameters.append("-b:least")
+        elif "aer" in backend_lower:
+            parameters.append("-b:aer")
         else:
             parameters.append(f"-b:{backend}")
 
@@ -428,11 +433,11 @@ def execute_circuit():
 
     # If control system is enabled, send command to quantum process
     if CONTROL_ENABLED:
-        # Write config.json with qasm_file, shots, and loop_mode so subprocess can read it
+        # Write config.json with qasm_file, shots, backend, and loop_mode so subprocess can read it
         config_path = FILES_DIR / "control" / "config.json"
         try:
             with open(config_path, 'w') as f:
-                json.dump({"qasm_file": qasm_file, "shots": shots, "loop_mode": False}, f)
+                json.dump({"qasm_file": qasm_file, "shots": shots, "backend": backend, "loop_mode": False}, f)
         except Exception as e:
             print(f"Warning: Could not write config.json: {e}")
 
