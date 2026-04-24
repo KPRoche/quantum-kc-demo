@@ -68,8 +68,6 @@ spec:
           mountPath: /app/files/svg
       volumes:
       - name: credentials
-        secret:
-          secretName: ibm-quantum-credentials
-          optional: true
+        emptyDir: {}
       - name: svg-output
         emptyDir: {}
