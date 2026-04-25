@@ -498,6 +498,13 @@ def execute_circuit():
     }), 202
 
 
+# Alias for console compatibility
+@app.route("/api/quantum/execute", methods=["POST"])
+def execute_quantum():
+    """Alias for /api/execute for console API compatibility"""
+    return execute_circuit()
+
+
 @app.route("/api/svg")
 def get_svg():
     """Get the current SVG result with auto-refresh"""
