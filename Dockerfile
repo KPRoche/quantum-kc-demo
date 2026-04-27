@@ -37,7 +37,7 @@ COPY requirements-docker.txt .
 RUN pip install --no-cache /wheels/* && rm -rf /wheels
 
 # Copy application files
-COPY QuantumKCDemo.v0_2.py qapp.py
+COPY QuantumKCDemo.v0_3.py qapp.py
 COPY quantum_control.py quantum_control.py
 #COPY expt.qasm expt.qasm
 #COPY expt12.qasm expt12.qasm
