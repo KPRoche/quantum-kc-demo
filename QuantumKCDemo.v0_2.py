@@ -854,7 +854,7 @@ def execute_circuit_once(qcirc, qasm_circuit_obj):
                     "shots": num_shots,
                     "timestamp": datetime.now().isoformat(),
                     "backend": backend_display,
-                    "backend_type": "noise_model" if (real_backend_name and "aer_noise" in backendparm) else "real" if real_backend_name else "simulator" if "aer" in backendparm else "real",
+                    "backend_type": "noise_model" if (real_backend_name and ("aer_noise" in backendparm or "aer_model" in backendparm)) else "real" if real_backend_name else "simulator" if "aer" in backendparm else "real",
                     "execution_sequence": execution_sequence,
                 }
                 temp = RESULT_FILE.with_suffix(".tmp")
