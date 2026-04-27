@@ -187,6 +187,7 @@ AddNoise = False
 debug = False
 qasmfileinput='expt.qasm'
 real_backend_name = None  # Track real backend used for noise models
+_last_backend_key = None  # Cache backend config to skip unnecessary StartQuantumService calls
 scriptfolder = os.path.dirname(os.path.realpath(__file__))
 
 #---------------------- GRAPHICS constants and functions-------------------------------------------
@@ -1588,7 +1589,16 @@ while outer_control_loop:
         
         # Create a fresh thread for each execution (old thread may have already finished from previous run)
         rainbowTie = Thread(target=glowing.run, daemon=False)  # instantiate the display thread
-        StartQuantumService()                                # try to connect and instantiate the IBMQ 
+
+        # Skip StartQuantumService if backend hasn't changed (optimization for shots-only changes)
+        global _last_backend_key
+        _current_backend_key = (backendparm, UseLocal, AddNoise, qubits_needed)
+        if _last_backend_key is None or _current_backend_key != _last_backend_key:
+            print(f"[CONTROL] Backend config changed, initializing quantum service...")
+            StartQuantumService()                                # try to connect and instantiate the IBMQ
+            _last_backend_key = _current_backend_key
+        else:
+            print(f"[CONTROL] Backend unchanged ({backendparm}), reusing existing backend") 
         
         qcirc=QuantumCircuit.from_qasm_str(qasm)   
         
