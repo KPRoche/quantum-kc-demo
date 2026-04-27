@@ -1592,6 +1592,7 @@ while outer_control_loop:
 
         # Skip StartQuantumService if backend hasn't changed (optimization for shots-only changes)
         global _last_backend_key
+
         _current_backend_key = (backendparm, UseLocal, AddNoise, qubits_needed)
         if _last_backend_key is None or _current_backend_key != _last_backend_key:
             print(f"[CONTROL] Backend config changed, initializing quantum service...")
