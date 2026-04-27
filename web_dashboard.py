@@ -392,6 +392,8 @@ def get_status():
             status_response["execution_mode"] = "control-based"
         else:
             status_response["execution_mode"] = "queue-based"
+        # Add version information
+        status_response["version_info"] = get_version_info()
         return jsonify(status_response)
 
 
