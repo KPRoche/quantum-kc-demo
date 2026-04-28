@@ -773,7 +773,7 @@ def find_qasm_file(qasmfileinput):
 
     return qasmfilename
 
-def execute_circuit_once(qcirc, qasm_circuit_obj):
+def execute_circuit_once(qcirc, qasm_circuit_obj, loop_iteration=0):
     """Execute a single quantum circuit and return results"""
     global Q, thinking, maxpattern, qubitpattern, runcounter, Qname, UseLocal, backendparm, real_backend_name
 
@@ -840,9 +840,9 @@ def execute_circuit_once(qcirc, qasm_circuit_obj):
             print("[DEBUG] About to write result file...")
             try:
                 RESULT_FILE = Path(os.environ.get("CONTROL_DIR", "/app/files/control")) / "result.json"
-                # Create a unique sequence number combining runcounter and iteration
+                # Create a unique sequence number combining runcounter and loop_iteration
                 # to track result changes even with rapid iterations
-                execution_sequence = runcounter * 10000 + iteration
+                execution_sequence = runcounter * 10000 + loop_iteration
 
                 backend_display = backendparm
                 if real_backend_name:
@@ -1685,7 +1685,7 @@ while outer_control_loop:
             qubitpattern = config_display_mask()
 
             # Execute the circuit (do this BEFORE checking loop_mode)
-            result = execute_circuit_once(qasm_circuit_obj, qasm_circuit_obj)
+            result = execute_circuit_once(qasm_circuit_obj, qasm_circuit_obj, loop_iteration=iteration)
 
             # After execution, check if we should continue looping
             if not loop_mode or iteration >= loop_iterations:
