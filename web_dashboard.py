@@ -87,6 +87,9 @@ PRESET_QASM_FILES = ["expt.qasm", "expt12.qasm", "expt16.qasm", "expt32.qasm"]
 # Loop mode result file (IPC from subprocess)
 LOOP_RESULT_FILE = FILES_DIR / "control" / "result.json"
 
+# Backend status file (IPC from subprocess during initialization)
+BACKEND_STATUS_FILE = FILES_DIR / "control" / "backend_status.json"
+
 # Global state
 quantum_state = {
     "running": False,
@@ -115,6 +118,9 @@ job_queue = queue_module.Queue()
 job_store = {}
 job_lock = threading.Lock()
 
+# Keep only the 100 most recent jobs in memory to prevent memory growth
+MAX_JOBS_IN_MEMORY = 100
+
 # Prometheus-style metrics
 metrics_lock = threading.Lock()
 metrics = {
@@ -127,6 +133,18 @@ metrics = {
 
 # Loop mode process management
 loop_process = None
+
+
+def _cleanup_old_jobs():
+	"""Remove oldest jobs if store exceeds MAX_JOBS_IN_MEMORY."""
+	with job_lock:
+		if len(job_store) > MAX_JOBS_IN_MEMORY:
+			completed_jobs = sorted(
+				(job_id for job_id, job in job_store.items() if job.get("status") == "completed"),
+				key=lambda jid: job_store[jid].get("completed_at", ""),
+			)
+			for job_id in completed_jobs[:len(job_store) - MAX_JOBS_IN_MEMORY]:
+				del job_store[job_id]
 
 
 class QuantumExecutor:
@@ -1064,6 +1082,7 @@ def cancel_job(job_id):
         with job_lock:
             job["status"] = "cancelled"
             job["completed_at"] = datetime.now().isoformat()
+        _cleanup_old_jobs()
         with metrics_lock:
             metrics["jobs_cancelled"] += 1
         return jsonify({"status": "cancelled", "job_id": job_id}), 200
@@ -1586,9 +1605,10 @@ def metrics_endpoint():
         execution_durations = metrics["execution_durations"][:]  # copy list
         http_reqs = metrics["http_requests"].copy()
 
-    # Count running and queued jobs
+    # Count running, building, and queued jobs
     with job_lock:
         jobs_running = sum(1 for j in job_store.values() if j["status"] == "running")
+        jobs_building = sum(1 for j in job_store.values() if j["status"] == "building")
         jobs_queued = sum(1 for j in job_store.values() if j["status"] == "queued")
 
     # Count cluster nodes
@@ -1622,6 +1642,10 @@ def metrics_endpoint():
     lines.append("# HELP quantum_jobs_running Currently running quantum jobs")
     lines.append("# TYPE quantum_jobs_running gauge")
     lines.append(f"quantum_jobs_running {jobs_running}")
+
+    lines.append("# HELP quantum_jobs_building Jobs initializing backend")
+    lines.append("# TYPE quantum_jobs_building gauge")
+    lines.append(f"quantum_jobs_building {jobs_building}")
 
     lines.append("# HELP quantum_jobs_queued Jobs waiting in queue")
     lines.append("# TYPE quantum_jobs_queued gauge")
@@ -1735,6 +1759,22 @@ def loop_process_monitor():
                 except Exception as e:
                     print(f"[LOOP] Error reading result file: {e}", file=sys.stderr)
 
+            # Check backend status file for job initialization state
+            if BACKEND_STATUS_FILE.exists():
+                try:
+                    with open(BACKEND_STATUS_FILE) as f:
+                        status_data = json.load(f)
+                    backend_status = status_data.get("status")
+
+                    # Update any job that is in "submitted_to_quantum" state to "building"
+                    with job_lock:
+                        for job in job_store.values():
+                            if job["status"] == "submitted_to_quantum" and backend_status == "building":
+                                job["status"] = "building"
+                                print(f"[BACKEND] Job status updated to building")
+                except Exception as e:
+                    print(f"[BACKEND] Error reading backend status file: {e}", file=sys.stderr)
+
             time.sleep(CHECK_INTERVAL)
         except Exception as e:
             print(f"Error in loop_process_monitor: {e}")
@@ -1829,6 +1869,7 @@ def _execute_queued_job(job_id):
                 job["status"] = "completed"
                 job["completed_at"] = datetime.now().isoformat()
                 job["result"] = result
+            _cleanup_old_jobs()
 
             with state_lock:
                 quantum_state["last_result"] = result
@@ -1873,6 +1914,7 @@ def _execute_queued_job(job_id):
             job["status"] = "failed"
             job["completed_at"] = datetime.now().isoformat()
             job["error"] = error_msg
+        _cleanup_old_jobs()
 
         with state_lock:
             quantum_state["status"] = "error"

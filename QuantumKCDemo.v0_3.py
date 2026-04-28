@@ -190,6 +190,26 @@ real_backend_name = None  # Track real backend used for noise models
 _last_backend_key = None  # Cache backend config to skip unnecessary StartQuantumService calls
 scriptfolder = os.path.dirname(os.path.realpath(__file__))
 
+# Status file management for backend initialization
+_BACKEND_STATUS_FILE = Path(os.environ.get("CONTROL_DIR", "/app/files/control")) / "backend_status.json"
+
+def _write_backend_status(state):
+	"""Write backend status file to indicate what the subprocess is doing"""
+	try:
+		_BACKEND_STATUS_FILE.parent.mkdir(parents=True, exist_ok=True)
+		with open(_BACKEND_STATUS_FILE, 'w') as f:
+			json.dump({"status": state, "timestamp": datetime.now().isoformat()}, f)
+	except Exception as e:
+		print(f"[WARNING] Could not write backend status file: {e}")
+
+def _clear_backend_status():
+	"""Remove backend status file"""
+	try:
+		if _BACKEND_STATUS_FILE.exists():
+			_BACKEND_STATUS_FILE.unlink()
+	except Exception as e:
+		print(f"[WARNING] Could not remove backend status file: {e}")
+
 #---------------------- GRAPHICS constants and functions-------------------------------------------
 
 ###########################################################################################
@@ -812,7 +832,7 @@ def execute_circuit_once(qcirc, qasm_circuit_obj, loop_iteration=0):
         while not qdone:
             qdone = qjob.in_final_state() or qjob.cancelled()
             if not UseLocal:
-                print(running_start, qjob.job_id(), "Job Done? ", qjob.in_final_state(), "| Cancelled? ", qjob.cancelled(), "| queued jobs:", qjob.backend().status().pending_jobs)
+                print(running_start, qjob.job_id(), "Job Done? ", qjob.in_final_state(), "| Cancelled? ", qjob.cancelled(), "| queued jobs:", Q.status().pending_jobs)
             else:
                 print(running_start, qjob.job_id(), "Job Done? ", qjob.in_final_state(), "| Cancelled? ", qjob.cancelled())
             if not qdone:
@@ -1603,7 +1623,9 @@ while outer_control_loop:
         _current_backend_key = (backendparm, UseLocal, AddNoise, qubits_needed)
         if _last_backend_key is None or _current_backend_key != _last_backend_key:
             print(f"[CONTROL] Backend config changed, initializing quantum service...")
+            _write_backend_status("building")
             StartQuantumService()                                # try to connect and instantiate the IBMQ
+            _clear_backend_status()
             _last_backend_key = _current_backend_key
         else:
             print(f"[CONTROL] Backend unchanged ({backendparm}), reusing existing backend") 
