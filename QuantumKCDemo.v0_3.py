@@ -981,9 +981,13 @@ def StartQuantumService():
             Q = AerSimulator(n_qubits=qubits_needed)    
             
     if not UseLocal:
-            
+
         print ('Pinging IBM Quantum API server before start')
-        p=ping('https://quantum.cloud.ibm.com',1,0.5,True)
+        try:
+            p=ping('https://quantum.cloud.ibm.com',1,0.5,True)
+        except Exception as e:
+            print(f"[FALLBACK] Could not reach IBM Quantum server: {e}")
+            p=None
         #p=ping('https://auth.quantum-computing.ibm.com/api',1,0.5,True)
         #p=ping('https://quantum-computing.ibm.com/',1,0.5,True)
         try:
