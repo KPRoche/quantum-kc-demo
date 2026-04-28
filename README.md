@@ -2,6 +2,19 @@
 
 > **Note:** This repository is based on [quantum-raspberry-tie](https://github.com/KPRoche/quantum-raspberry-tie)
 
+## Spring 2026 Updates
+
+**Quantum-kc-demo** is a containerized quantum computing demo based on the Quantum Raspberry Tie repository.
+
+- The interactive looping demo has been modified to be controlled via a couple of json files for running without a terminal
+- A companion Flask server app provides endpoints to control the demo via web browser, curl, or other techniques
+- publicly accessible images of the containerized app are available via ghcr.io
+- A set of "cards" for the KubeStellar Console are in progress so it can be run as an example workload via that tool
+
+**Note:** _Claude Code is being used in the debugging and development of this repository._ That is because of the intent of using it as an example workload with KubeStellar Console, which can use agents to modify itself in response to user input. This demo was therefore deliberately built with the assistance of the Claude LiteLLM, as is apparent from its code history. The human author (Kevin Roche) was actively inspecting and approving code modifications as they were made by Claude as well as directly editing code himself. 
+
+---
+
 <img src='New Logo Screen.png' width='150' alt='display while waiting for results' style='float:right;'><br/>
 Your Raspberry Pi running code on the IBM Quantum platform processors or simulators via Python 3 -- with results displayed courtesy of the 8x8 LED array on a SenseHat (or SenseHat emulator)!
 
