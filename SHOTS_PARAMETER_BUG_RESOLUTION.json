@@ -1,0 +1,14 @@
+{
+  "title": "Quantum Shots Parameter Not Forwarded to Backend",
+  "issueType": "ParameterMishandling",
+  "resourceKind": "Pod",
+  "problem": "The quantum-kc-demo workload was not accepting the shots parameter from the Quantum Control Panel, always defaulting to 50 shots instead of the user-specified value. The issue had two parts: the backend wasn't forwarding the parameter conditionally, and the results were calculating shots from count sums instead of preserving the parameter.",
+  "solution": "Fix two bugs in quantum-kc-demo: (1) Remove conditional forwarding of shots parameter in web_dashboard.py line 423 to always append it, and (2) Change qapp.py result_data to use the num_shots variable instead of calculating shots from count sums.",
+  "steps": [
+    "In /app/web_dashboard.py line 423, change 'if shots and shots != 10: parameters.append(f\"-shots:{shots}\")' to unconditionally append: parameters.append(f\"-shots:{shots}\")",
+    "In /app/qapp.py where result_data is built, change '\"shots\": sum(counts.values())' to '\"shots\": num_shots' to preserve the actual shots parameter used in execution",
+    "Verify the fix by querying /api/quantum/status API endpoint and confirming the shots field matches the value sent in the control panel request",
+    "Test with multiple shot values (e.g., 50, 75, 100) to ensure each returns the correct shots value in results"
+  ],
+  "yaml": null
+}
