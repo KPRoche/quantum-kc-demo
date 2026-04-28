@@ -1,6 +1,6 @@
 # Multi-stage build for quantum-raspberry-tie deployable image
 # Stage 1: Builder
-FROM python:3.11-slim as builder
+FROM python:3.14-slim as builder
 
 WORKDIR /build
 
@@ -17,7 +17,7 @@ COPY requirements-docker.txt .
 RUN pip wheel --no-cache-dir --no-deps --wheel-dir /build/wheels -r requirements-docker.txt
 
 # Stage 2: Runtime
-FROM python:3.11-slim
+FROM python:3.14-slim
 
 WORKDIR /app
 
@@ -74,7 +74,7 @@ ENV QUANTUM_DISPLAY_MODE=svg \
     QUANTUM_BACKEND=local \
     QUANTUM_QUBITS=5 \
     FLASK_ENV=production \
-    APP_VERSION=v0.3.09 \
+    APP_VERSION=v0.3.10 \
     SVG_OUTPUT_DIR=/app/files/svg \
     QASM_DIR=/app/files/qasm \
     CONTROL_DIR=/app/files/control \

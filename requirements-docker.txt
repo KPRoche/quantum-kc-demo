@@ -15,8 +15,8 @@ Flask==3.0.0
 Flask-CORS==4.0.0
 
 # Graphics and visualization
-Pillow==10.0.0
-matplotlib==3.8.4
+Pillow==12.2.0
+matplotlib==3.9.2
 
 # Circuit rendering dependencies
 pylatexenc==2.10
