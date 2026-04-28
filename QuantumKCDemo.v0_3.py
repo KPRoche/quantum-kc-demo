@@ -1064,11 +1064,18 @@ def StartQuantumService():
                     from qiskit_aer import AerSimulator
                     if "model" in backendparm or "nois" in backendparm or AddNoise:
                         print("getting a real backend connection for aer model")
-                        real_backend = Qservice.least_busy(simulator=False)#operational=True, backend("ibm_brisbane")
-                        print("creating AerSimulator modeled from ",real_backend.name," with ",qubits_needed," qubits")
-                        real_backend_name = real_backend.name
-                        # Create noise model constrained to the needed qubit count
-                        Q = AerSimulator.from_backend(real_backend, max_qubits=qubits_needed)
+                        try:
+                            real_backend = Qservice.least_busy(simulator=False)#operational=True, backend("ibm_brisbane")
+                            print("creating AerSimulator modeled from ",real_backend.name," with ",qubits_needed," qubits")
+                            real_backend_name = real_backend.name
+                            # Create noise model constrained to the needed qubit count
+                            Q = AerSimulator.from_backend(real_backend, max_qubits=qubits_needed)
+                            print("Successfully built noise model from real backend")
+                        except Exception as e:
+                            print(f"[ERROR] Failed to build AerSimulator noise model: {type(e).__name__}: {e}")
+                            print("[FALLBACK] Falling back to basic AerSimulator without noise model")
+                            real_backend_name = None
+                            Q = AerSimulator(n_qubits=qubits_needed)
                     else:
                         print("creating basic Aer Simulator")
                         real_backend_name = None
