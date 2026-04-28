@@ -1028,11 +1028,12 @@ def StartQuantumService():
                          
                          # -----   
                                                         
-                    else:    # THIS IS WHERE WE END UP if user answers No to saving account info -- exit gracefully 
-                        print ("Please follow the instructions at ")
-                        print("     https://docs.quantum.ibm.com/guides/setup-channel#set-up-to-use-ibm-quantum-platform")
-                        print ("to store your account credentials")
-                        quit()
+                    else:    # THIS IS WHERE WE END UP if user answers No to saving account info -- fall back to local
+                        print ("[FALLBACK] No IBM Quantum credentials available, falling back to local simulator")
+                        UseLocal = True
+                        from qiskit_aer import AerSimulator
+                        real_backend_name = None
+                        Q = AerSimulator(n_qubits=qubits_needed)
                 
                 #-- If we've made it here we have successfully created our runtimeservice!
                 if "aer" in backendparm:
@@ -1063,9 +1064,17 @@ def StartQuantumService():
                     else:
                         interval = 300
             else:                    # The older IBMQ authentication technique
-                exit() #this code only works with the new Qiskit>v1.0
+                print("[FALLBACK] Old IBMQ auth technique not supported, falling back to local simulator")
+                UseLocal = True
+                from qiskit_aer import AerSimulator
+                real_backend_name = None
+                Q = AerSimulator(n_qubits=qubits_needed)
         else:
-            exit()
+            print("[FALLBACK] Could not reach IBM Quantum server, falling back to local simulator")
+            UseLocal = True
+            from qiskit_aer import AerSimulator
+            real_backend_name = None
+            Q = AerSimulator(n_qubits=qubits_needed)
     else: # THIS IS THE CASE FOR USING LOCAL SIMULATOR
         backend='local aer qasm_simulator'
         print ("Building ",backend, "with requested attributes...")
