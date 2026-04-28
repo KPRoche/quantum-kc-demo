@@ -815,9 +815,12 @@ def execute_circuit_once(qcirc, qasm_circuit_obj, loop_iteration=0):
 
         # Print backend status
         if not UseLocal:
-            print("backend: ", Q.name, " operational? ", Q.status().operational, " Pending:", Q.status().pending_jobs)
+            try:
+                print("backend: ", Q.name, " operational? ", Q.status().operational, " Pending:", Q.status().pending_jobs)
+            except AttributeError:
+                print("backend: ", Q.name, " operational? UNKNOWN (status() not available)")
         else:
-            print("backend: ", Q.name, " operational? ALWAYS")
+            print("backend: ", Q.name, " operational? ALWAYS (local)")
 
         # Run the job
         print("running job")
@@ -832,7 +835,11 @@ def execute_circuit_once(qcirc, qasm_circuit_obj, loop_iteration=0):
         while not qdone:
             qdone = qjob.in_final_state() or qjob.cancelled()
             if not UseLocal:
-                print(running_start, qjob.job_id(), "Job Done? ", qjob.in_final_state(), "| Cancelled? ", qjob.cancelled(), "| queued jobs:", Q.status().pending_jobs)
+                try:
+                    pending = Q.status().pending_jobs
+                    print(running_start, qjob.job_id(), "Job Done? ", qjob.in_final_state(), "| Cancelled? ", qjob.cancelled(), "| queued jobs:", pending)
+                except AttributeError:
+                    print(running_start, qjob.job_id(), "Job Done? ", qjob.in_final_state(), "| Cancelled? ", qjob.cancelled())
             else:
                 print(running_start, qjob.job_id(), "Job Done? ", qjob.in_final_state(), "| Cancelled? ", qjob.cancelled())
             if not qdone:
