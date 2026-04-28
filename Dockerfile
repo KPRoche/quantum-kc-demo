@@ -27,6 +27,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     libfreetype6 \
     libpng16-16 \
+    tzdata \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy wheels from builder
@@ -57,6 +58,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends bash && rm -rf 
 COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
+# Set timezone to America/Los_Angeles
+RUN ln -snf /usr/share/zoneinfo/America/Los_Angeles /etc/localtime && echo "America/Los_Angeles" > /etc/timezone
+
 # Create non-root user for security
 RUN useradd -m -u 1000 quantum && chown -R quantum:quantum /app
 
@@ -73,7 +77,8 @@ ENV QUANTUM_DISPLAY_MODE=svg \
     APP_VERSION=v0.3.05 \
     SVG_OUTPUT_DIR=/app/files/svg \
     QASM_DIR=/app/files/qasm \
-    CONTROL_DIR=/app/files/control
+    CONTROL_DIR=/app/files/control \
+    TZ=America/Los_Angeles
 
 # Run both services
 ENTRYPOINT ["/app/entrypoint.sh"]

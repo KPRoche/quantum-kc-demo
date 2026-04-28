@@ -39,6 +39,8 @@ spec:
           value: "5"
         - name: FLASK_ENV
           value: "production"
+        - name: TZ
+          value: "America/Los_Angeles"
         livenessProbe:
           httpGet:
             path: /health
