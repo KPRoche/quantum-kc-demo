@@ -853,20 +853,32 @@ def get_circuit_png():
 
     try:
         from io import BytesIO
+        import sys
+        import traceback
         num_qubits = executor.circuit.num_qubits
         # Scale width based on qubit count (0.3 inches per qubit, minimum 12)
         width = max(12, num_qubits * 0.3)
         height = max(8, num_qubits * 0.15 + 3)
 
-        # fold=-1 disables wrapping, draw entire circuit horizontally
-        fig = executor.circuit.draw(output='mpl', scale=0.7, fold=-1)
+        # In Qiskit 2.4.1, circuit rendering with matplotlib can hit recursion limits
+        # Use a reasonable fold value and reduce DPI to minimize layout complexity
+        try:
+            fig = executor.circuit.draw(output='mpl', scale=0.5, fold=100)
+        except RecursionError:
+            # If drawing still fails, try with even more conservative settings
+            fig = executor.circuit.draw(output='mpl', scale=0.3, fold=4)
+
         fig.set_size_inches(width, height)
         buffer = BytesIO()
-        fig.savefig(buffer, format='png', bbox_inches='tight', dpi=100)
+        fig.savefig(buffer, format='png', bbox_inches='tight', dpi=80)
         buffer.seek(0)
         return send_file(buffer, mimetype='image/png', as_attachment=False)
+    except RecursionError:
+        return jsonify({"error": "Circuit too complex for PNG rendering. Use ASCII format instead."}), 400
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        import traceback as tb
+        tb.print_exc(file=sys.stderr, limit=5)
+        return jsonify({"error": str(e)[:200]}), 500
 
 
 @app.route("/api/qasm/circuit/ascii", methods=["GET"])
