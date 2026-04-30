@@ -15,6 +15,148 @@
 
 ---
 
+## Setup for KubeStellar Console
+
+This project is designed to run as a containerized workload in Kubernetes for integration with KubeStellar Console. The following sections detail how to configure the cluster, set environment variables, and customize the deployment.
+
+### Cluster Setup — Exposing the Service
+
+The quantum service must be accessible from the KubeStellar Console. The method depends on your cluster type.
+
+#### kind (development/demo)
+
+The provided `k8s/service.yaml` exposes the service as a `NodePort` on port **30500**. For kind clusters to reach this port from the host machine, you must configure port mappings at cluster creation time:
+
+```yaml
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+  extraPortMappings:
+  - containerPort: 30500
+    hostPort: 30500
+    protocol: TCP
+```
+
+Create the cluster with this config, then the service is reachable at `http://localhost:30500`. Without this mapping, the NodePort is only accessible from inside the kind network.
+
+#### OpenShift / OCM clusters
+
+Replace the `NodePort` with a `Route`. Modify `k8s/service.yaml`:
+
+```yaml
+spec:
+  type: ClusterIP  # Change from NodePort
+  ports:
+  - name: http
+    port: 80
+    targetPort: 5000
+    protocol: TCP
+```
+
+Then create an OpenShift `Route` targeting the service:
+
+```yaml
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: quantum-kc-demo
+  namespace: quantum
+spec:
+  host: quantum-kc-demo.<your-cluster-domain>
+  to:
+    kind: Service
+    name: quantum-kc-demo
+  port:
+    targetPort: 5000
+```
+
+Note: The console `QuantumCircuitViewer` card hardcodes `http://localhost:30500` — for OpenShift, you must update this to the Route hostname in the console code.
+
+#### Cloud-managed (EKS, GKE, AKS) and bare metal
+
+Use `type: LoadBalancer` in `k8s/service.yaml`:
+
+```yaml
+spec:
+  type: LoadBalancer
+  ports:
+  - name: http
+    port: 80
+    targetPort: 5000
+    protocol: TCP
+```
+
+The cloud provider assigns an external IP or hostname; the service is reachable at that address. Alternatively, use an `Ingress` resource if your cluster has an `IngressController` configured.
+
+### Environment Variables
+
+Configuration happens at two layers: the quantum service deployment and the KubeStellar Console backend.
+
+#### quantum-kc-demo Deployment (`k8s/deployment.yaml`)
+
+| Variable | Default | Options | Purpose |
+|---|---|---|---|
+| `QUANTUM_BACKEND` | `local` | `local`, `aer`, `aer_noise`, `ibm_real` | Backend simulator or IBM Quantum real hardware |
+| `QUANTUM_QUBITS` | `5` | `5`, `12`, `16`, `32` | Number of qubits in the circuit |
+| `TZ` | `America/Los_Angeles` | [IANA timezone](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) | Timezone for service logs and timestamps |
+| `PORT` | `5000` | (do not change) | Flask listen port — must match `targetPort` in `service.yaml` |
+| `FLASK_ENV` | `production` | `production`, `development` | Flask environment; use `development` only for debugging |
+
+Example: To use the Aer simulator with 12 qubits:
+
+```yaml
+env:
+- name: QUANTUM_BACKEND
+  value: aer
+- name: QUANTUM_QUBITS
+  value: "12"
+```
+
+The Dockerfile also sets `QUANTUM_DISPLAY_MODE=svg`, `SVG_OUTPUT_DIR=/app/files/svg`, `QASM_DIR=/app/files/qasm`, and `CONTROL_DIR=/app/files/control` — these generally do not need to be overridden.
+
+#### KubeStellar Console Backend (`QUANTUM_SERVICE_URL`)
+
+The console components need to know how to reach the quantum service. Set the environment variable `QUANTUM_SERVICE_URL` in your console deployment based on cluster type and access pattern:
+
+| Cluster Type | Proxy Type | `QUANTUM_SERVICE_URL` |
+|---|---|---|
+| kind | kubectl port-forward | `http://localhost:5000` |
+| kind | NodePort (direct) | `http://localhost:30500` |
+| OpenShift / Cloud | In-cluster | `http://quantum-kc-demo.quantum.svc.cluster.local:5000` |
+| OpenShift / Cloud | External (Route/LoadBalancer) | `https://<route-or-lb-hostname>` |
+
+**Note on console components:**
+- All quantum cards (**QuantumCircuitViewer**, **QuantumStatus**, **QuantumControlPanel**, **QuantumQubitGrid**) use the backend proxy pattern via `/api/quantum/*` endpoints.
+- The **Go backend proxy** (`quantum_proxy.go`) uses `QUANTUM_SERVICE_URL` environment variable, defaulting to `http://localhost:5000`.
+- The **Netlify functions** (`quantum-proxy.mts`) use the same variable, defaulting to the in-cluster DNS name `http://quantum-kc-demo.quantum.svc.cluster.local:5000`.
+
+### Dockerfile and deployment.yaml Customizations
+
+#### Dockerfile
+
+- **`APP_VERSION`** (line ~14): Update to match the image tag being built, e.g., `ENV APP_VERSION v0.3.14`.
+- **`TZ`** (line ~36): The timezone is baked into the container for system libraries. It can be overridden at runtime in `deployment.yaml`, but building with the correct timezone avoids time-zone-related issues in logs and the control loop.
+- No other customizations are typically needed.
+
+#### k8s/deployment.yaml
+
+- **`image:`** Update to `ghcr.io/kproche/quantum-kc-demo:<version>` with the desired release tag.
+- **`QUANTUM_BACKEND`** and **`QUANTUM_QUBITS`**: Override in the `env:` section if different from defaults.
+- **`credentials` volume**: Currently `emptyDir` (ephemeral). For IBM Quantum real hardware:
+  - Create a Kubernetes `Secret` with your IBM Quantum `credentials/config.json`.
+  - Mount it as a volume: `secret: { secretName: quantum-credentials }`.
+  - Or use a `PersistentVolumeClaim` backed by storage.
+- **`svg-output` volume**: Also `emptyDir`. For persistent SVG result history, replace with a `PersistentVolumeClaim`.
+
+#### k8s/service.yaml
+
+- **kind**: Keep `type: NodePort`, `nodePort: 30500`.
+- **OpenShift**: Change to `type: ClusterIP`, remove the `nodePort` field, and create a `Route` separately.
+- **Cloud/bare metal**: Change to `type: LoadBalancer`, remove `nodePort`.
+
+---
+
 <img src='New Logo Screen.png' width='150' alt='display while waiting for results' style='float:right;'><br/>
 Your Raspberry Pi running code on the IBM Quantum platform processors or simulators via Python 3 -- with results displayed courtesy of the 8x8 LED array on a SenseHat (or SenseHat emulator)!
 
