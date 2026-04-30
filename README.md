@@ -157,6 +157,121 @@ The console components need to know how to reach the quantum service. Set the en
 
 ---
 
+## API Endpoints
+
+The quantum service exposes a REST API for controlling and monitoring quantum circuit execution. These endpoints work with any HTTP client (curl, browser, or web application) without requiring KubeStellar Console. Discover all endpoints with `curl http://localhost:5000/api/endpoints`.
+
+### Core Status & Information
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/status` | GET | Current backend status, job queue depth, version |
+| `/api/result` | GET | Latest execution result (measurement pattern, probabilities) |
+| `/api/version` | GET | App version and commit information |
+| `/api/endpoints` | GET | Full endpoint map organized by category (JSON) |
+
+### Quantum Circuit Execution
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/execute` | POST | Execute circuit once; returns `job_id` for polling (JSON: `backend`, `shots`, `qubits`) |
+| `/api/jobs` | POST | Submit a job to queue with optional parameters |
+| `/api/jobs` | GET | List all jobs; optional `?status=` filter (`queued`, `running`, `completed`, `failed`) |
+| `/api/jobs/<job_id>` | GET | Get specific job status and result |
+| `/api/jobs/<job_id>/cancel` | POST | Cancel queued or interrupt running job |
+
+### Circuit Diagrams (Multiple Formats)
+
+| Endpoint | Method | Description | Output |
+|---|---|---|---|
+| `/api/qasm/circuit` | GET | Circuit diagram as interactive HTML | HTML with embedded matplotlib image |
+| `/api/qasm/circuit/raw` | GET | Circuit diagram as ASCII text | Plain text ASCII art |
+| `/api/qasm/circuit/ascii` | GET | Circuit diagram (alias) | Plain text ASCII art |
+| `/api/qasm/circuit/png` | GET | Circuit diagram as PNG image | Binary PNG image |
+
+### Qubit Measurement Results
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/qubits` | GET | Full qubit state (pattern, binary string, probabilities, display colors) |
+| `/api/qubits/simple` | GET | Lightweight qubit data (pattern, num_qubits, timestamp, shots) |
+| `/api/svg` | GET | SVG result with auto-refresh HTML wrapper |
+| `/api/svg/raw` | GET | Raw SVG image without HTML wrapper |
+
+### QASM Management
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/qasm/active` | GET | Export currently loaded circuit as QASM |
+| `/api/qasm/active` | POST | Load QASM into executor (JSON: `qasm`) |
+| `/api/qasm/file` | GET | Get QASM file; `?name=X` for specific file |
+| `/api/qasm/file` | POST | Save QASM file (JSON: `filename`, `qasm`) |
+
+### Loop Mode (Continuous Execution)
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/loop/status` | GET | Check if loop running, iteration count, elapsed time |
+| `/api/loop/start` | POST | Begin looping execution (JSON: `backend`, `qubits`, `shots`) |
+| `/api/loop/stop` | POST | Stop looping execution |
+
+### Configuration & Authentication
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/config` | GET | Current configuration (backend, qubits, shots, etc.) |
+| `/api/config` | POST | Update configuration (JSON: `backend`, `qubits`, `shots`) |
+| `/api/auth/status` | GET | IBM Quantum authentication status |
+| `/api/auth/save` | POST | Save IBM Quantum credentials (JSON: `channel`, `token`) |
+
+### Kubernetes & Cluster
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/health` | GET | Liveness probe (Kubernetes) |
+| `/ready` | GET | Readiness probe (Kubernetes) |
+| `/metrics` | GET | Prometheus metrics in text exposition format |
+| `/api/cluster/status` | GET | Cluster coordination status |
+| `/api/cluster/nodes` | GET | List registered cluster nodes |
+
+### Example API Usage
+
+**Get current circuit diagram as HTML (view in browser):**
+```bash
+curl http://localhost:5000/api/qasm/circuit
+```
+
+**Get latest qubit measurement result:**
+```bash
+curl http://localhost:5000/api/qubits
+```
+
+**Start looping on Aer simulator with 12 qubits:**
+```bash
+curl -X POST http://localhost:5000/api/loop/start \
+  -H "Content-Type: application/json" \
+  -d '{"backend": "aer", "qubits": 12}'
+```
+
+**Execute once with custom shots:**
+```bash
+curl -X POST http://localhost:5000/api/execute \
+  -H "Content-Type: application/json" \
+  -d '{"shots": 100, "backend": "aer"}'
+```
+
+**Check execution status:**
+```bash
+curl http://localhost:5000/api/status
+```
+
+**Stop looping:**
+```bash
+curl -X POST http://localhost:5000/api/loop/stop
+```
+
+---
+
 <img src='New Logo Screen.png' width='150' alt='display while waiting for results' style='float:right;'><br/>
 Your Raspberry Pi running code on the IBM Quantum platform processors or simulators via Python 3 -- with results displayed courtesy of the 8x8 LED array on a SenseHat (or SenseHat emulator)!
 
