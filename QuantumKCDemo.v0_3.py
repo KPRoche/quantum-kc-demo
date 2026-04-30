@@ -1744,7 +1744,7 @@ while outer_control_loop:
             print(f"[LOOP] Waiting {wait_interval}s before next iteration...")
             sleep(wait_interval)
 
-    # After the execution loop completes, mark command as complete and return to waiting state
+        # After the execution loop completes, mark command as complete and return to waiting state
         if outer_control_loop:
             print("\n[CONTROL] Circuit execution complete.")
             command_complete()
