@@ -931,8 +931,8 @@ def get_circuit_ascii():
             return "⚠ No circuit loaded yet. Run an execution or load a QASM file to display circuit.", 200, {'Content-Type': 'text/plain'}
 
     try:
-        # Generate circuit diagram as ASCII/text art
-        circuit_ascii = str(executor.circuit.draw(output='text'))
+        # Generate circuit diagram as ASCII/text art with no wrapping (fold=-1 disables folding)
+        circuit_ascii = str(executor.circuit.draw(output='text', fold=-1))
         # Return as HTML with <pre> for proper formatting in browsers
         html = f"""<!DOCTYPE html>
 <html>
