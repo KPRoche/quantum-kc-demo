@@ -933,7 +933,22 @@ def get_circuit_ascii():
     try:
         # Generate circuit diagram as ASCII/text art
         circuit_ascii = str(executor.circuit.draw(output='text'))
-        return circuit_ascii, 200, {'Content-Type': 'text/plain'}
+        # Return as HTML with <pre> for proper formatting in browsers
+        html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Circuit Diagram</title>
+    <style>
+        body {{ font-family: monospace; margin: 20px; background: #f5f5f5; }}
+        pre {{ background: white; padding: 15px; border-radius: 5px; overflow-x: auto; border: 1px solid #ddd; }}
+    </style>
+</head>
+<body>
+    <pre>{circuit_ascii}</pre>
+</body>
+</html>"""
+        return html, 200, {'Content-Type': 'text/html'}
     except Exception as e:
         return f"Error generating circuit: {str(e)}", 500, {'Content-Type': 'text/plain'}
 
