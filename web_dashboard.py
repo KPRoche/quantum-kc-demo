@@ -18,6 +18,9 @@ from flask import Flask, render_template, jsonify, request, send_file
 from flask_cors import CORS
 import numpy as np
 
+# Increase recursion limit for matplotlib rendering of large circuits
+sys.setrecursionlimit(10000)
+
 # Import quantum execution logic
 import sys
 sys.path.insert(0, os.path.dirname(__file__))
@@ -860,24 +863,57 @@ def get_circuit_png():
         width = max(12, num_qubits * 0.3)
         height = max(8, num_qubits * 0.15 + 3)
 
-        # In Qiskit 2.4.1, circuit rendering with matplotlib can hit recursion limits
-        # Use a reasonable fold value and reduce DPI to minimize layout complexity
+        # Qiskit 2.4.1 matplotlib rendering hits recursion limits for large circuits
+        # Fall back to rendering ASCII as PNG using PIL when matplotlib fails
+        buffer = None
+        fig = None
+        import matplotlib.pyplot as plt
         try:
             fig = executor.circuit.draw(output='mpl', scale=0.5, fold=100)
+            fig.set_size_inches(width, height)
+            for ax in fig.get_axes():
+                ax.set_title('')
+            buffer = BytesIO()
+            fig.savefig(buffer, format='png', dpi=80)
         except RecursionError:
-            # If drawing still fails, try with even more conservative settings
-            fig = executor.circuit.draw(output='mpl', scale=0.3, fold=4)
+            # matplotlib failed, render ASCII as image instead
+            if fig:
+                plt.close(fig)
+            try:
+                ascii_circuit = str(executor.circuit.draw(output='text'))
+                from PIL import Image, ImageDraw, ImageFont
+                lines = ascii_circuit.split('\n')
+                line_height = 12
+                char_width = 7
+                img_height = max(300, len(lines) * line_height + 20)
+                img_width = max(800, (max(len(line) for line in lines if line) + 5) * char_width)
+                img = Image.new('RGB', (img_width, img_height), color='white')
+                draw = ImageDraw.Draw(img)
+                for i, line in enumerate(lines):
+                    draw.text((10, 10 + i * line_height), line, fill='black')
+                buffer = BytesIO()
+                img.save(buffer, format='png')
+            except Exception as pil_error:
+                with open("/tmp/png_error.log", "a") as f:
+                    f.write(f"\nPIL fallback failed: {str(pil_error)}\n")
+                raise
 
-        fig.set_size_inches(width, height)
-        buffer = BytesIO()
-        fig.savefig(buffer, format='png', bbox_inches='tight', dpi=80)
-        buffer.seek(0)
-        return send_file(buffer, mimetype='image/png', as_attachment=False)
-    except RecursionError:
+        if buffer:
+            buffer.seek(0)
+            return send_file(buffer, mimetype='image/png', as_attachment=False)
+        else:
+            return jsonify({"error": "Failed to render circuit PNG"}), 500
+    except RecursionError as re:
+        import traceback as tb
+        with open("/tmp/png_error.log", "a") as f:
+            tb.print_exc(file=f, limit=10)
+            f.write(f"\n[PNG] RecursionError: {str(re)}\n")
         return jsonify({"error": "Circuit too complex for PNG rendering. Use ASCII format instead."}), 400
     except Exception as e:
         import traceback as tb
-        tb.print_exc(file=sys.stderr, limit=5)
+        with open("/tmp/png_error.log", "a") as f:
+            tb.print_exc(file=f, limit=5)
+            f.write(f"\n[PNG] Error: {str(e)}\n")
         return jsonify({"error": str(e)[:200]}), 500
 
 
