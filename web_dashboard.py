@@ -350,6 +350,8 @@ def list_endpoints():
         "qasm_management": [
             {"path": "/api/qasm/file", "method": "GET/POST", "description": "Get or save QASM files"},
             {"path": "/api/qasm/active", "method": "GET/POST", "description": "Get or load active QASM in executor"},
+            {"path": "/api/qasm/listfiles", "method": "GET", "description": "List all available QASM files (preset and user-uploaded)"},
+            {"path": "/api/qasm/readfile", "method": "GET", "description": "Read content of a specific QASM file (query param: ?name=filename)"},
             {"path": "/api/qasm/circuit", "method": "GET", "description": "Get circuit diagram as HTML with matplotlib image"},
             {"path": "/api/qasm/circuit/raw", "method": "GET", "description": "Get circuit diagram as ASCII art text (returns 'circuit not rendered yet' if no circuit)"},
             {"path": "/api/qasm/circuit/ascii", "method": "GET", "description": "Get circuit diagram as ASCII art text drawing (same as /circuit/raw)"}
@@ -1992,6 +1994,94 @@ def _execute_queued_job(job_id):
     finally:
         with state_lock:
             quantum_state["running"] = False
+
+
+@app.route("/api/qasm/listfiles", methods=["GET"])
+def qasm_listfiles():
+    """List all available QASM files (preset and user-uploaded)"""
+    files_list = []
+
+    # Add preset QASM files
+    for preset_file in PRESET_QASM_FILES:
+        preset_path = Path(__file__).parent / preset_file
+        if preset_path.exists():
+            try:
+                size = preset_path.stat().st_size
+                files_list.append({
+                    "name": preset_file,
+                    "source": "preset",
+                    "size": size
+                })
+            except Exception:
+                pass
+
+    # Add user-uploaded QASM files from QASM_DIR
+    try:
+        for qasm_file in QASM_DIR.glob("*.qasm"):
+            if qasm_file.name not in PRESET_QASM_FILES:
+                try:
+                    size = qasm_file.stat().st_size
+                    files_list.append({
+                        "name": qasm_file.name,
+                        "source": "user",
+                        "size": size
+                    })
+                except Exception:
+                    pass
+    except Exception as e:
+        return jsonify({"error": f"Failed to list files: {str(e)}"}), 500
+
+    # Sort by name
+    files_list.sort(key=lambda x: x["name"])
+
+    return jsonify({
+        "files": files_list,
+        "count": len(files_list)
+    })
+
+
+@app.route("/api/qasm/readfile", methods=["GET"])
+def qasm_readfile():
+    """Read content of a specific QASM file"""
+    filename = request.args.get("name")
+
+    if not filename:
+        return jsonify({"error": "Missing 'name' parameter"}), 400
+
+    # Prevent directory traversal attacks
+    if ".." in filename or "/" in filename or "\\" in filename:
+        return jsonify({"error": "Invalid filename"}), 400
+
+    # Determine file location
+    if filename in PRESET_QASM_FILES:
+        qasm_path = Path(__file__).parent / filename
+        source = "preset"
+    else:
+        qasm_path = QASM_DIR / filename
+        source = "user"
+
+    # Check if file exists
+    if not qasm_path.exists():
+        return jsonify({"error": f"QASM file not found: {filename}"}), 404
+
+    # Check if path is actually in expected directory (prevent traversal)
+    try:
+        qasm_path.resolve().relative_to(QASM_DIR.resolve() if source == "user" else Path(__file__).parent.resolve())
+    except ValueError:
+        return jsonify({"error": "Invalid file path"}), 403
+
+    # Read and return file
+    try:
+        with open(qasm_path, 'r') as f:
+            content = f.read()
+        return jsonify({
+            "name": filename,
+            "content": content,
+            "source": source,
+            "size": len(content)
+        })
+    except Exception as e:
+        return jsonify({"error": f"Failed to read file: {str(e)}"}), 500
 
 
 def main():
