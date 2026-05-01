@@ -645,8 +645,10 @@ def qasm_file():
     elif request.method == "POST":
         # Save QASM file
         data = request.json or {}
-        filename = data.get("name", "").strip()
-        content = data.get("content", "").strip()
+        filename = data.get("name") or data.get("filename", "")
+        filename = filename.strip() if isinstance(filename, str) else ""
+        content = data.get("content") or data.get("qasm", "")
+        content = content.strip() if isinstance(content, str) else ""
 
         if not filename or not content:
             return jsonify({"error": "Both 'name' and 'content' are required"}), 400
@@ -699,7 +701,8 @@ def qasm_active():
     elif request.method == "POST":
         # Load QASM content into executor
         data = request.json or {}
-        content = data.get("content", "").strip()
+        content = data.get("content") or data.get("qasm", "")
+        content = content.strip() if isinstance(content, str) else ""
 
         if not content:
             return jsonify({"error": "Content is required"}), 400
