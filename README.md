@@ -15,6 +15,31 @@
 
 ---
 
+## Quick Start: Using with KubeStellar Console
+
+**For console users:** If you want to run quantum-kc-demo in your Kubernetes cluster and use it with KubeStellar Console, follow the [KubeStellar Console Quantum Deployment Guide](https://github.com/kubestellar/console/blob/main/docs/QUANTUM_DEPLOYMENT.md).
+
+The guide covers:
+- Deploying quantum-kc-demo to your cluster (kind, OpenShift, EKS, GKE, AKS)
+- Configuring service exposure (NodePort, LoadBalancer, Route, or port-forward)
+- Connecting console backend via `QUANTUM_SERVICE_URL` environment variable
+- Using quantum cards (Control Panel, Circuit Viewer, Status, Results)
+
+TL;DR for kind (development):
+```bash
+# In quantum-kc-demo repo
+kubectl create namespace quantum
+kubectl apply -f k8s/deployment.yaml k8s/service.yaml
+
+# In console repo, set env var before starting backend
+export QUANTUM_SERVICE_URL=http://localhost:30500
+./start-dev.sh
+
+# Open console at http://localhost:5174 and add quantum cards
+```
+
+---
+
 ## Setup for KubeStellar Console
 
 This project is designed to run as a containerized workload in Kubernetes for integration with KubeStellar Console. The following sections detail how to configure the cluster, set environment variables, and customize the deployment.
