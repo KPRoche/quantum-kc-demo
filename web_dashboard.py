@@ -1998,36 +1998,21 @@ def _execute_queued_job(job_id):
 
 @app.route("/api/qasm/listfiles", methods=["GET"])
 def qasm_listfiles():
-    """List all available QASM files (preset and user-uploaded)"""
+    """List all available QASM files in the qasm directory"""
     files_list = []
 
-    # Add preset QASM files
-    for preset_file in PRESET_QASM_FILES:
-        preset_path = Path(__file__).parent / preset_file
-        if preset_path.exists():
+    try:
+        for qasm_file in QASM_DIR.glob("*.qasm"):
             try:
-                size = preset_path.stat().st_size
+                size = qasm_file.stat().st_size
+                is_preset = qasm_file.name in PRESET_QASM_FILES
                 files_list.append({
-                    "name": preset_file,
-                    "source": "preset",
+                    "name": qasm_file.name,
+                    "source": "preset" if is_preset else "user",
                     "size": size
                 })
             except Exception:
                 pass
-
-    # Add user-uploaded QASM files from QASM_DIR
-    try:
-        for qasm_file in QASM_DIR.glob("*.qasm"):
-            if qasm_file.name not in PRESET_QASM_FILES:
-                try:
-                    size = qasm_file.stat().st_size
-                    files_list.append({
-                        "name": qasm_file.name,
-                        "source": "user",
-                        "size": size
-                    })
-                except Exception:
-                    pass
     except Exception as e:
         return jsonify({"error": f"Failed to list files: {str(e)}"}), 500
 
