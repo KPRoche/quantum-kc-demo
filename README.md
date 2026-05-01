@@ -295,6 +295,60 @@ curl http://localhost:5000/api/status
 curl -X POST http://localhost:5000/api/loop/stop
 ```
 
+## Test Circuits
+
+The `files/qasm/` directory includes several test circuits for experimenting with quantum execution:
+
+### Pre-defined Circuits
+
+| File | Qubits | Purpose |
+|------|--------|---------|
+| `expt.qasm` | 5 | Random number generator — Hadamard on each qubit |
+| `expt12.qasm` | 12 | Hex-connected 12-qubit circuit |
+| `expt16.qasm` | 16 | Heavy-hex 16-qubit circuit (IBM processor topology) |
+| `expt32.qasm` | 32 | Large 32-qubit circuit |
+
+### Educational Test Circuits
+
+| File | Qubits | Purpose |
+|------|--------|---------|
+| `bell.qasm` | 2 | **Bell State** — maximally entangled state for testing Bell's inequality. Creates (&#124;00⟩ + &#124;11⟩)/√2 |
+| `half-adder.qasm` | 4 | Simple quantum half-adder circuit with XOR and AND logic |
+
+### Using Test Circuits
+
+**Via REST API:**
+```bash
+# Execute Bell state circuit
+curl -X POST http://localhost:5000/api/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "qasm_file": "bell.qasm",
+    "backend": "aer",
+    "shots": 1024
+  }'
+
+# Save a custom circuit
+curl -X POST http://localhost:5000/api/qasm/file \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "my_circuit.qasm",
+    "content": "OPENQASM 2.0;\ninclude \"qelib1.inc\";\nqreg q[2];\ncreg c[2];\nh q[0];\nmeasure q -> c;"
+  }'
+```
+
+**Via CLI:**
+```bash
+# Run Bell state circuit
+python QuantumKCDemo.v0_3.py -b:aer -f:bell.qasm
+
+# Run with noise model
+python QuantumKCDemo.v0_3.py -b:aer_noise -f:bell.qasm -hex
+```
+
+**Via Console:**
+In KubeStellar Console Quantum Control Panel, paste or upload custom QASM circuits and execute them directly.
+
 ---
 
 <img src='New Logo Screen.png' width='150' alt='display while waiting for results' style='float:right;'><br/>
