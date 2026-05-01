@@ -312,8 +312,9 @@ The `files/qasm/` directory includes several test circuits for experimenting wit
 
 | File | Qubits | Purpose |
 |------|--------|---------|
-| `bell.qasm` | 2 | **Bell State** — maximally entangled state for testing Bell's inequality. Creates (&#124;00⟩ + &#124;11⟩)/√2 |
-| `half-adder.qasm` | 4 | Simple quantum half-adder circuit with XOR and AND logic |
+| `bell.qasm` | 2 | **Bell State** — Prepares (&#124;00⟩ + &#124;11⟩)/√2 maximally entangled state |
+| `bells-inequality.qasm` | 2 | **Bell's Inequality (CHSH)** — Tests quantum non-locality by violating classical bounds. Foundation for Bell test experiments |
+| `half-adder.qasm` | 4 | **Quantum Half-Adder** — 1-bit adder using CNOT (XOR) and Toffoli (AND) gates |
 
 ### Using Test Circuits
 
