@@ -304,13 +304,13 @@ def get_qubits_simple():
     """Get the latest qubit measurement as a string and structured data"""
     with state_lock:
         if not quantum_state["last_result"]:
-            return jsonify({"error": "No measurement available yet"}), 404
+            return jsonify({"warning": "No measurement available yet"}), 200
 
         result = quantum_state["last_result"]
         counts = result.get("counts", {})
 
     if not counts:
-        return jsonify({"error": "No measurement data available"}), 404
+        return jsonify({"warning": "No measurement data available"}), 200
 
     # Get most common pattern (same logic as SVG generation)
     pattern = max(counts, key=counts.get)
@@ -602,6 +602,51 @@ def get_result():
         if quantum_state["last_result"]:
             return jsonify(quantum_state["last_result"])
     return jsonify({"warning": "No result available"}), 200
+
+
+@app.route("/api/result/histogram")
+def get_result_histogram():
+    """Get latest result as a histogram of bit patterns vs counts.
+    Query param: sort=count (default) | sort=pattern
+    """
+    sort_by = request.args.get("sort", "count")
+
+    with state_lock:
+        last_result = quantum_state["last_result"]
+
+    if not last_result:
+        return jsonify({"warning": "No result available"}), 200
+
+    counts = last_result.get("counts", {})
+    if not counts:
+        return jsonify({"warning": "No counts data available"}), 200
+
+    total_shots = sum(counts.values())
+    entries = [
+        {
+            "pattern": pattern,
+            "count": count,
+            "probability": round(count / total_shots, 6) if total_shots else 0
+        }
+        for pattern, count in counts.items()
+    ]
+
+    if sort_by == "pattern":
+        histogram = sorted(entries, key=lambda x: int(x["pattern"], 2))
+    else:
+        histogram = sorted(entries, key=lambda x: x["count"], reverse=True)
+
+    return jsonify({
+        "histogram": histogram,
+        "sort": sort_by,
+        "num_patterns": len(histogram),
+        "total_shots": total_shots,
+        "num_qubits": last_result.get("num_qubits"),
+        "timestamp": last_result.get("timestamp"),
+        "backend": last_result.get("backend"),
+        "backend_type": last_result.get("backend_type"),
+        "execution_sequence": last_result.get("execution_sequence")
+    }), 200
 
 
 # ============================================================================
