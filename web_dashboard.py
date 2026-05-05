@@ -417,6 +417,31 @@ def get_status():
             status_response["execution_mode"] = "queue-based"
         # Add version information
         status_response["version_info"] = get_version_info()
+        # Add IBM Quantum authentication status
+        try:
+            from qiskit_ibm_runtime import QiskitRuntimeService
+            from qiskit_ibm_runtime.accounts.exceptions import AccountNotFoundError
+            try:
+                service = QiskitRuntimeService()
+                config_path = CREDENTIALS_DIR / "auth.json"
+                crn_display = "Configured"
+                if config_path.exists():
+                    with open(config_path, 'r') as f:
+                        auth_data = json.load(f)
+                        crn_display = auth_data.get("crn_masked", "Configured")
+                status_response["ibm_auth"] = {
+                    "authenticated": True,
+                    "crn": crn_display
+                }
+            except AccountNotFoundError:
+                status_response["ibm_auth"] = {
+                    "authenticated": False
+                }
+        except Exception as e:
+            status_response["ibm_auth"] = {
+                "authenticated": False,
+                "error": str(e)
+            }
         return jsonify(status_response)
 
 
