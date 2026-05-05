@@ -870,13 +870,24 @@ def execute_circuit_once(qcirc, qasm_circuit_obj, loop_iteration=0):
                 # to track result changes even with rapid iterations
                 execution_sequence = runcounter * 10000 + loop_iteration
 
+                # Determine actual backend name used for this execution
+                actual_backend_name = real_backend_name
+                try:
+                    # Try to get the actual backend name from Q object
+                    if hasattr(Q, 'name'):
+                        actual_backend_name = Q.name
+                    elif hasattr(Q, 'backend_name'):
+                        actual_backend_name = Q.backend_name
+                except:
+                    pass  # Fall back to real_backend_name if Q doesn't have name
+
                 backend_display = backendparm
-                if real_backend_name:
+                if actual_backend_name:
                     # For noise models and least-busy, append the actual backend name
                     if "aer_noise" in backendparm or "aer_model" in backendparm:
-                        backend_display = f"aer_noise.{real_backend_name}"
+                        backend_display = f"aer_noise.{actual_backend_name}"
                     else:
-                        backend_display = f"{backendparm}.{real_backend_name}"
+                        backend_display = f"{backendparm}.{actual_backend_name}"
 
                 result_data = {
                     "pattern": maxpattern,
