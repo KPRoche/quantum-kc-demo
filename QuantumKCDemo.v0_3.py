@@ -1677,7 +1677,18 @@ while outer_control_loop:
             _clear_backend_status()
             _last_backend_key = _current_backend_key
         else:
-            print(f"[CONTROL] Backend unchanged ({backendparm}), reusing existing backend") 
+            print(f"[CONTROL] Backend unchanged ({backendparm}), reusing existing backend")
+            # Even if backend is cached, try to update real_backend_name if not already set
+            if not real_backend_name and "least" in backendparm and not UseLocal:
+                try:
+                    # Try to get the actual least-busy backend name
+                    from qiskit_ibm_runtime import QiskitRuntimeService
+                    Qservice = QiskitRuntimeService()
+                    real_backend = Qservice.least_busy(operational=True, simulator=False)
+                    real_backend_name = real_backend.name
+                    print(f"[CONTROL] Updated real_backend_name from cached backend: {real_backend_name}")
+                except Exception as e:
+                    print(f"[CONTROL] Could not update real_backend_name: {e}") 
         
         qcirc=QuantumCircuit.from_qasm_str(qasm)   
         
