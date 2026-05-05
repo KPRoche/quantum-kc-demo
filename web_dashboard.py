@@ -1059,7 +1059,12 @@ def save_authentication():
     api_key = data.get("api_key", "").strip()
     crn = data.get("crn", "").strip()
 
+    print(f"[AUTH] Received auth save request:", flush=True)
+    print(f"[AUTH] API Key present: {bool(api_key)} (length: {len(api_key)})", flush=True)
+    print(f"[AUTH] CRN present: {bool(crn)} (length: {len(crn)})", flush=True)
+
     if not api_key or not crn:
+        print(f"[AUTH] Error: Missing credentials - api_key empty: {not api_key}, crn empty: {not crn}", flush=True)
         return jsonify({"error": "Both API Key and CRN are required"}), 400
 
     try:
@@ -1067,12 +1072,14 @@ def save_authentication():
         from qiskit_ibm_runtime import QiskitRuntimeService
 
         # Save the account credentials
+        print(f"[AUTH] Calling QiskitRuntimeService.save_account...", flush=True)
         QiskitRuntimeService.save_account(
             token=api_key,
             instance=crn,
             overwrite=True,
             set_as_default=True
         )
+        print(f"[AUTH] save_account succeeded", flush=True)
 
         # Also store in our config for reference
         config_path = CREDENTIALS_DIR / "auth.json"
