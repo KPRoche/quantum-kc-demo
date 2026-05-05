@@ -871,28 +871,21 @@ def execute_circuit_once(qcirc, qasm_circuit_obj, loop_iteration=0):
                 execution_sequence = runcounter * 10000 + loop_iteration
 
                 # Determine actual backend name used for this execution
+                # real_backend_name was set during StartQuantumService() at startup, use that as primary source
                 actual_backend_name = real_backend_name
-                try:
-                    # Try to get the actual backend name from Q object
-                    if hasattr(Q, 'name'):
-                        actual_backend_name = Q.name
-                        print(f"[RESULT] Got backend name from Q.name: {actual_backend_name}", flush=True)
-                    elif hasattr(Q, 'backend_name'):
-                        actual_backend_name = Q.backend_name
-                        print(f"[RESULT] Got backend name from Q.backend_name: {actual_backend_name}", flush=True)
-                    else:
-                        print(f"[RESULT] Q has no name attribute, using real_backend_name: {real_backend_name}", flush=True)
-                except Exception as e:
-                    print(f"[RESULT] Error getting backend name from Q: {e}", flush=True)
-                    pass  # Fall back to real_backend_name if Q doesn't have name
 
                 backend_display = backendparm
-                if actual_backend_name:
-                    # For noise models and least-busy, append the actual backend name
+                if actual_backend_name and actual_backend_name.lower() not in ("aer_simulator", "simulator", "aer"):
+                    # Only append if we have a real backend name that's not a simulator
                     if "aer_noise" in backendparm or "aer_model" in backendparm:
                         backend_display = f"aer_noise.{actual_backend_name}"
+                    elif "least" in backendparm:
+                        backend_display = f"least.{actual_backend_name}"
                     else:
                         backend_display = f"{backendparm}.{actual_backend_name}"
+                    print(f"[RESULT] Backend display: {backend_display} (from real_backend_name: {actual_backend_name})", flush=True)
+                else:
+                    print(f"[RESULT] Using default backend display: {backendparm} (no real backend name available)", flush=True)
 
                 result_data = {
                     "pattern": maxpattern,
