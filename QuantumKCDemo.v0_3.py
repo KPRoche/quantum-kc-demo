@@ -876,9 +876,14 @@ def execute_circuit_once(qcirc, qasm_circuit_obj, loop_iteration=0):
                     # Try to get the actual backend name from Q object
                     if hasattr(Q, 'name'):
                         actual_backend_name = Q.name
+                        print(f"[RESULT] Got backend name from Q.name: {actual_backend_name}", flush=True)
                     elif hasattr(Q, 'backend_name'):
                         actual_backend_name = Q.backend_name
-                except:
+                        print(f"[RESULT] Got backend name from Q.backend_name: {actual_backend_name}", flush=True)
+                    else:
+                        print(f"[RESULT] Q has no name attribute, using real_backend_name: {real_backend_name}", flush=True)
+                except Exception as e:
+                    print(f"[RESULT] Error getting backend name from Q: {e}", flush=True)
                     pass  # Fall back to real_backend_name if Q doesn't have name
 
                 backend_display = backendparm
