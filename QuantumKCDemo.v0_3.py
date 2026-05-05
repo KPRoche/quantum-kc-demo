@@ -1106,7 +1106,7 @@ def StartQuantumService():
                             real_backend_name = Q.name
                         else:
                             Q = Qservice.backend(backendparm)
-                            real_backend_name = None
+                            real_backend_name = backendparm  # Set actual backend name for non-least selections
                             
                     except:
                         print("first backend attempt failed...")
