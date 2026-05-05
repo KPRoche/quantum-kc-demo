@@ -1113,13 +1113,23 @@ def StartQuantumService():
                         if "least" in backendparm:
                             Q = Qservice.least_busy(operational=True, simulator=False)
                             real_backend_name = Q.name
+                            print(f"Successfully got least-busy backend: {real_backend_name}")
                         else:
                             Q = Qservice.backend(backendparm)
                             real_backend_name = backendparm  # Set actual backend name for non-least selections
-                            
-                    except:
-                        print("first backend attempt failed...")
-                        Q=Qservice.backend(backend)
+                            print(f"Successfully got backend: {real_backend_name}")
+
+                    except Exception as e:
+                        print(f"[ERROR] first backend attempt failed: {type(e).__name__}: {e}")
+                        real_backend_name = backendparm if "least" not in backendparm else None
+                        try:
+                            Q=Qservice.backend(backend)
+                        except:
+                            print("[FALLBACK] Could not get backend, using local simulator")
+                            UseLocal = True
+                            from qiskit_aer import AerSimulator
+                            real_backend_name = None
+                            Q = AerSimulator(n_qubits=qubits_needed)
                     else:
                         interval = 300
             else:                    # The older IBMQ authentication technique
