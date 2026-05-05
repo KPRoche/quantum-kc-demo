@@ -1075,13 +1075,20 @@ def StartQuantumService():
                     if "model" in backendparm or "nois" in backendparm or AddNoise:
                         print("getting a real backend connection for aer model")
                         try:
-                            real_backend = Qservice.least_busy(simulator=False)#operational=True, backend("ibm_brisbane")
-                            print("creating AerSimulator modeled from ",real_backend.name," with ",qubits_needed," qubits")
-                            real_backend_name = real_backend.name
-                            # Create noise model constrained to the needed qubit count
-                            Q = AerSimulator.from_backend(real_backend)
-                            Q.set_max_qubits(qubits_needed)
-                            print("Successfully built noise model from real backend")
+                            # Only try to get real backend if we have IBM Quantum credentials
+                            if not UseLocal:
+                                real_backend = Qservice.least_busy(simulator=False)#operational=True, backend("ibm_brisbane")
+                                print("creating AerSimulator modeled from ",real_backend.name," with ",qubits_needed," qubits")
+                                real_backend_name = real_backend.name
+                                # Create noise model constrained to the needed qubit count
+                                Q = AerSimulator.from_backend(real_backend)
+                                Q.set_max_qubits(qubits_needed)
+                                print("Successfully built noise model from real backend")
+                            else:
+                                # No credentials available, use basic simulator
+                                print("[FALLBACK] No IBM Quantum credentials available, cannot build noise model")
+                                real_backend_name = None
+                                Q = AerSimulator(n_qubits=qubits_needed)
                         except Exception as e:
                             print(f"[ERROR] Failed to build AerSimulator noise model: {type(e).__name__}: {e}")
                             print("[FALLBACK] Falling back to basic AerSimulator without noise model")
