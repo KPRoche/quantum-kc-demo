@@ -65,6 +65,7 @@ RUN ln -snf /usr/share/zoneinfo/America/Los_Angeles /etc/localtime && echo "Amer
 RUN useradd -m -u 1000 quantum && chown -R quantum:quantum /app
 
 USER quantum
+ENV HOME=/home/quantum
 
 # Expose web dashboard port
 EXPOSE 5000
