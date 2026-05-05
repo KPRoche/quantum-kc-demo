@@ -109,6 +109,14 @@ quantum_state = {
 state_lock = threading.Lock()
 loop_lock = threading.Lock()
 
+# Cache for IBM auth status to avoid frequent QiskitRuntimeService calls
+ibm_auth_cache = {
+    "status": None,
+    "timestamp": 0,
+    "ttl_seconds": 30  # Refresh every 30 seconds
+}
+ibm_auth_cache_lock = threading.Lock()
+
 # Startup timestamp for liveness probe
 APP_START_TIME = time.time()
 
@@ -419,44 +427,62 @@ def get_status():
         # Add version information
         status_response["version_info"] = get_version_info()
 
-    # Check IBM Quantum authentication status OUTSIDE the lock to avoid deadlocking health check
-    auth_start = time.time()
-    try:
-        from qiskit_ibm_runtime import QiskitRuntimeService
-        from qiskit_ibm_runtime.accounts.exceptions import AccountNotFoundError
+    # Check IBM Quantum authentication status using cache to avoid frequent network calls
+    cache_age = time.time() - ibm_auth_cache["timestamp"]
+    use_cache = ibm_auth_cache["status"] is not None and cache_age < ibm_auth_cache["ttl_seconds"]
 
-        qiskit_start = time.time()
+    if use_cache:
+        # Use cached result
+        with ibm_auth_cache_lock:
+            status_response["ibm_auth"] = ibm_auth_cache["status"]
+        print(f"[STATUS] Using cached auth status (age: {cache_age:.1f}s)", flush=True)
+    else:
+        # Need to refresh cache (outside lock to avoid blocking other requests)
         try:
-            service = QiskitRuntimeService()
-            qiskit_elapsed = time.time() - qiskit_start
-            print(f"[STATUS] QiskitRuntimeService() took {qiskit_elapsed:.3f}s", flush=True)
+            from qiskit_ibm_runtime import QiskitRuntimeService
+            from qiskit_ibm_runtime.accounts.exceptions import AccountNotFoundError
 
-            config_path = CREDENTIALS_DIR / "auth.json"
-            crn_display = "Configured"
-            if config_path.exists():
-                with open(config_path, 'r') as f:
-                    auth_data = json.load(f)
-                    crn_display = auth_data.get("crn_masked", "Configured")
-            status_response["ibm_auth"] = {
-                "authenticated": True,
-                "crn": crn_display
-            }
-        except AccountNotFoundError:
-            qiskit_elapsed = time.time() - qiskit_start
-            print(f"[STATUS] QiskitRuntimeService() took {qiskit_elapsed:.3f}s (AccountNotFoundError)", flush=True)
-            status_response["ibm_auth"] = {
-                "authenticated": False
-            }
-    except Exception as e:
-        qiskit_elapsed = time.time() - qiskit_start
-        print(f"[STATUS] QiskitRuntimeService() took {qiskit_elapsed:.3f}s (Exception: {type(e).__name__})", flush=True)
-        status_response["ibm_auth"] = {
-            "authenticated": False,
-            "error": str(e)
-        }
+            qiskit_start = time.time()
+            try:
+                service = QiskitRuntimeService()
+                qiskit_elapsed = time.time() - qiskit_start
+                print(f"[STATUS] QiskitRuntimeService() took {qiskit_elapsed:.3f}s", flush=True)
 
-    auth_total = time.time() - auth_start
-    print(f"[STATUS] Total auth check took {auth_total:.3f}s", flush=True)
+                config_path = CREDENTIALS_DIR / "auth.json"
+                crn_display = "Configured"
+                if config_path.exists():
+                    with open(config_path, 'r') as f:
+                        auth_data = json.load(f)
+                        crn_display = auth_data.get("crn_masked", "Configured")
+                auth_result = {
+                    "authenticated": True,
+                    "crn": crn_display
+                }
+            except AccountNotFoundError:
+                qiskit_elapsed = time.time() - qiskit_start
+                print(f"[STATUS] QiskitRuntimeService() took {qiskit_elapsed:.3f}s (AccountNotFoundError)", flush=True)
+                auth_result = {
+                    "authenticated": False
+                }
+            except Exception as e:
+                qiskit_elapsed = time.time() - qiskit_start
+                print(f"[STATUS] QiskitRuntimeService() took {qiskit_elapsed:.3f}s (Exception: {type(e).__name__})", flush=True)
+                auth_result = {
+                    "authenticated": False,
+                    "error": str(e)
+                }
+
+            # Update cache
+            with ibm_auth_cache_lock:
+                ibm_auth_cache["status"] = auth_result
+                ibm_auth_cache["timestamp"] = time.time()
+            status_response["ibm_auth"] = auth_result
+        except Exception as e:
+            print(f"[STATUS] Unexpected error checking auth: {e}", flush=True)
+            status_response["ibm_auth"] = {
+                "authenticated": False,
+                "error": "Failed to check authentication"
+            }
 
     return jsonify(status_response)
 
