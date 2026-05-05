@@ -420,11 +420,17 @@ def get_status():
         status_response["version_info"] = get_version_info()
 
     # Check IBM Quantum authentication status OUTSIDE the lock to avoid deadlocking health check
+    auth_start = time.time()
     try:
         from qiskit_ibm_runtime import QiskitRuntimeService
         from qiskit_ibm_runtime.accounts.exceptions import AccountNotFoundError
+
+        qiskit_start = time.time()
         try:
             service = QiskitRuntimeService()
+            qiskit_elapsed = time.time() - qiskit_start
+            print(f"[STATUS] QiskitRuntimeService() took {qiskit_elapsed:.3f}s", flush=True)
+
             config_path = CREDENTIALS_DIR / "auth.json"
             crn_display = "Configured"
             if config_path.exists():
@@ -436,14 +442,21 @@ def get_status():
                 "crn": crn_display
             }
         except AccountNotFoundError:
+            qiskit_elapsed = time.time() - qiskit_start
+            print(f"[STATUS] QiskitRuntimeService() took {qiskit_elapsed:.3f}s (AccountNotFoundError)", flush=True)
             status_response["ibm_auth"] = {
                 "authenticated": False
             }
     except Exception as e:
+        qiskit_elapsed = time.time() - qiskit_start
+        print(f"[STATUS] QiskitRuntimeService() took {qiskit_elapsed:.3f}s (Exception: {type(e).__name__})", flush=True)
         status_response["ibm_auth"] = {
             "authenticated": False,
             "error": str(e)
         }
+
+    auth_total = time.time() - auth_start
+    print(f"[STATUS] Total auth check took {auth_total:.3f}s", flush=True)
 
     return jsonify(status_response)
 
