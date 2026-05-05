@@ -69,8 +69,13 @@ spec:
           mountPath: /app/credentials
         - name: svg-output
           mountPath: /app/files/svg
+        - name: qiskit-config
+          mountPath: /home/quantum/.qiskit
       volumes:
       - name: credentials
         emptyDir: {}
       - name: svg-output
         emptyDir: {}
+      - name: qiskit-config
+        persistentVolumeClaim:
+          claimName: quantum-qiskit-config
