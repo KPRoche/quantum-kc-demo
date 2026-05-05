@@ -363,7 +363,8 @@ def list_endpoints():
         "configuration": [
             {"path": "/api/config", "method": "GET/POST", "description": "Get or set configuration"},
             {"path": "/api/auth/save", "method": "POST", "description": "Save IBM Quantum credentials"},
-            {"path": "/api/auth/status", "method": "GET", "description": "Check authentication status"}
+            {"path": "/api/auth/status", "method": "GET", "description": "Check authentication status"},
+            {"path": "/api/auth/clear", "method": "DELETE", "description": "Clear saved IBM Quantum credentials"}
         ],
         "loop_mode": [
             {"path": "/api/loop/status", "method": "GET", "description": "Get loop mode status"},
@@ -1138,6 +1139,41 @@ def get_auth_status():
         return jsonify({
             "authenticated": False,
             "message": f"Error checking authentication: {str(e)}"
+        }), 500
+
+
+@app.route("/api/auth/clear", methods=["DELETE"])
+def clear_authentication():
+    """Clear saved IBM Quantum authentication credentials"""
+    try:
+        from qiskit_ibm_runtime import QiskitRuntimeService
+
+        # Clear Qiskit's stored credentials
+        try:
+            QiskitRuntimeService.delete_account()
+            print(f"[AUTH] Successfully cleared Qiskit credentials", flush=True)
+        except Exception as e:
+            print(f"[AUTH] Warning: Could not delete Qiskit account: {e}", flush=True)
+            # This may fail if no account exists, which is fine
+
+        # Clear our local auth.json file
+        config_path = CREDENTIALS_DIR / "auth.json"
+        if config_path.exists():
+            try:
+                config_path.unlink()
+                print(f"[AUTH] Successfully cleared local auth.json", flush=True)
+            except Exception as e:
+                print(f"[AUTH] Warning: Could not delete auth.json: {e}", flush=True)
+
+        return jsonify({
+            "status": "cleared",
+            "message": "IBM Quantum credentials have been cleared"
+        })
+
+    except Exception as e:
+        return jsonify({
+            "error": str(e),
+            "message": "Failed to clear credentials"
         }), 500
 
 
