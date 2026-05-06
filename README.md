@@ -44,6 +44,40 @@ export QUANTUM_SERVICE_URL=http://localhost:30500
 
 This project is designed to run as a containerized workload in Kubernetes for integration with KubeStellar Console. The following sections detail how to configure the cluster, set environment variables, and customize the deployment.
 
+### Automatic Workload Detection
+
+The KubeStellar Console now includes automatic quantum workload detection. This prevents resource waste when quantum-kc-demo is not deployed in your cluster.
+
+#### How It Works
+
+When the console backend starts:
+1. On first load, the `/health` endpoint checks if quantum-kc-demo is running in the `quantum` namespace across all clusters
+2. If the deployment has 0 available replicas, quantum cards automatically lock to demo mode
+3. The cards skip API polling and display demo data instead
+4. When you deploy quantum-kc-demo later, the next health check (within 30 seconds) will detect it
+5. Cards automatically unlock and begin polling live data
+
+#### Why This Matters
+
+- **No resource waste** — failed API calls are eliminated when workload is absent
+- **Clean demo experience** — demo data shows immediately; no error messages
+- **Automatic recovery** — when quantum-kc-demo is deployed, cards seamlessly switch to live mode
+
+#### Environment Variable Overrides
+
+For testing or special deployments, you can override the auto-detection:
+
+```bash
+# Force demo mode (useful for maintenance or testing without real hardware)
+export QUANTUM_WORKLOAD_DISABLED=true
+
+# Force live mode (useful for testing with mock backend)
+export QUANTUM_WORKLOAD_RUNNING=true
+
+# Default: auto-detect from Kubernetes (recommended for production)
+# (no env var needed)
+```
+
 ### Cluster Setup — Exposing the Service
 
 The quantum service must be accessible from the KubeStellar Console. The method depends on your cluster type.

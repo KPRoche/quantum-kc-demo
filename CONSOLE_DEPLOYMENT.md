@@ -6,6 +6,40 @@ This guide covers deploying the [quantum-kc-demo](https://github.com/KPRoche/qua
 
 The quantum-kc-demo is a containerized quantum computing simulator with a REST API. KubeStellar Console provides UI cards to interact with it (circuit execution, results visualization, SVG display). The console communicates with the quantum service via the `QUANTUM_SERVICE_URL` environment variable.
 
+## Automatic Workload Detection
+
+The KubeStellar Console now includes automatic quantum workload detection. This prevents resource waste when quantum-kc-demo is not deployed in your cluster.
+
+### How It Works
+
+When the console backend starts:
+1. On first load, the `/health` endpoint checks if quantum-kc-demo is running in the `quantum` namespace across all clusters
+2. If the deployment has 0 available replicas, quantum cards automatically lock to demo mode
+3. The cards skip API polling and display demo data instead
+4. When you deploy quantum-kc-demo later, the next health check (within 30 seconds) will detect it
+5. Cards automatically unlock and begin polling live data
+
+### Why This Matters
+
+- **No resource waste** — failed API calls are eliminated when workload is absent
+- **Clean demo experience** — demo data shows immediately; no error messages
+- **Automatic recovery** — when quantum-kc-demo is deployed, cards seamlessly switch to live mode
+
+### Environment Variable Overrides
+
+For testing or special deployments, you can override the auto-detection:
+
+```bash
+# Force demo mode (useful for maintenance or testing without real hardware)
+export QUANTUM_WORKLOAD_DISABLED=true
+
+# Force live mode (useful for testing with mock backend)
+export QUANTUM_WORKLOAD_RUNNING=true
+
+# Default: auto-detect from Kubernetes (recommended for production)
+# (no env var needed)
+```
+
 ## Prerequisites
 
 - Kubernetes cluster (kind, OpenShift, EKS, GKE, AKS, or bare metal)
@@ -163,12 +197,16 @@ The backend runs on `localhost:8080` and uses the `QUANTUM_SERVICE_URL` to proxy
 ## Step 3: Access Quantum Cards in the Console
 
 1. Open the console at `http://localhost:5174`
-2. Create or open a dashboard
-3. Add quantum cards:
+2. Look for "Quantum Demo" in the dashboard list (under Available Dashboards)
+   - If quantum-kc-demo is NOT deployed, the dashboard will be available but cards will show demo data
+   - If quantum-kc-demo IS deployed, cards will show live execution results
+3. Click "Add" to add the Quantum Demo dashboard to your workspace
+4. Alternatively, create a custom dashboard and add individual quantum cards:
    - **Quantum Control Panel** — Execute circuits, select backends, manage loop mode
-   - **Quantum Circuit Viewer** — View circuit execution results as SVG
-   - **Quantum Status** — Monitor current execution status
-   - **Quantum Results** — View detailed measurement results
+   - **Quantum Circuit Viewer** — View circuit execution results as SVG (ASCII representation)
+   - **Quantum Status** — Monitor current execution status and loop mode
+   - **Quantum Qubit Grid** — View measurement results in grid/visualization format
+   - **Quantum Histogram** — View measurement results as a bar chart (sorted by pattern or frequency)
 
 ## Configuration Options
 
@@ -182,6 +220,15 @@ Edit `k8s/deployment.yaml` to customize the quantum service:
 | `QUANTUM_QUBITS` | `5` | `5`, `12`, `16` | Number of qubits in the circuit |
 | `FLASK_ENV` | `production` | `production`, `development` | Flask environment |
 | `TZ` | `America/Los_Angeles` | Any valid timezone | Container timezone |
+
+#### Workload Detection Overrides (Console Backend)
+
+These variables control how the console detects and handles quantum workload availability:
+
+| Variable | Default | Options | Purpose |
+|----------|---------|---------|---------|
+| `QUANTUM_WORKLOAD_DISABLED` | `false` | `true`, `false` | Force demo mode (disable workload detection) |
+| `QUANTUM_WORKLOAD_RUNNING` | `false` | `true`, `false` | Force live mode (assume workload is available) |
 
 Example: To use a 12-qubit hex circuit:
 
@@ -246,6 +293,23 @@ For cloud LoadBalancer:
 - Wait for external IP assignment (can take 1-2 minutes)
 - Check security groups/firewall allow traffic to port 80/5000
 - Verify LoadBalancer service endpoint is correct
+
+### Understanding Demo Mode
+
+**What is demo mode?** When the quantum-kc-demo workload is not available, quantum cards display simulated data instead of live execution results. This allows you to explore the console UI without a running backend.
+
+**How to identify demo mode:**
+- Look for a **yellow "Demo" badge** on each quantum card (in top-right corner)
+- Card outline is also highlighted in yellow
+- Data does not update when you press "Execute" — it shows pre-recorded results
+
+**How to exit demo mode:**
+1. Deploy quantum-kc-demo to your cluster (see Deployment step above)
+2. Wait up to 30 seconds for the console to detect the workload
+3. Refresh the browser or navigate away and back to the dashboard
+4. Cards will show "Demo" badge disappear and data will update on circuit execution
+
+**Can I force demo mode?** Yes, set `QUANTUM_WORKLOAD_DISABLED=true` before starting the console backend. This is useful for documentation screenshots or demo environments where you don't want live backend dependencies.
 
 ## Advanced: Using Custom QASM Circuits
 
