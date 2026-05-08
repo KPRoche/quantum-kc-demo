@@ -216,10 +216,11 @@ Edit `k8s/deployment.yaml` to customize the quantum service:
 
 | Variable | Default | Options | Purpose |
 |----------|---------|---------|---------|
-| `QUANTUM_BACKEND` | `local` | `local`, `aer`, `aer_noise` | Simulator backend (no credentials needed) |
-| `QUANTUM_QUBITS` | `5` | `5`, `12`, `16` | Number of qubits in the circuit |
-| `FLASK_ENV` | `production` | `production`, `development` | Flask environment |
-| `TZ` | `America/Los_Angeles` | Any valid timezone | Container timezone |
+| `QUANTUM_BACKEND` | `local` | `local`, `aer`, `aer_noise` | Backend simulator (no credentials needed); use IBM Quantum credentials for real hardware |
+| `QUANTUM_QUBITS` | `5` | `5`, `12`, `16`, `32` | Number of qubits in the circuit |
+| `PORT` | `5000` | (do not change) | Flask listen port — must match `targetPort` in `service.yaml` |
+| `FLASK_ENV` | `production` | `production`, `development` | Flask environment; use `development` only for debugging |
+| `TZ` | `America/Los_Angeles` | [IANA timezone](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) | Timezone for service logs and timestamps |
 
 #### Workload Detection Overrides (Console Backend)
 

@@ -17,7 +17,7 @@
 
 ## Quick Start: Using with KubeStellar Console
 
-**For console users:** If you want to run quantum-kc-demo in your Kubernetes cluster and use it with KubeStellar Console, follow the [KubeStellar Console Quantum Deployment Guide](https://github.com/kubestellar/console/blob/main/docs/QUANTUM_DEPLOYMENT.md).
+**For console users:** If you want to run quantum-kc-demo in your Kubernetes cluster and use it with KubeStellar Console, follow the [Console Deployment Guide](./CONSOLE_DEPLOYMENT.md).
 
 The guide covers:
 - Deploying quantum-kc-demo to your cluster (kind, OpenShift, EKS, GKE, AKS)
@@ -156,7 +156,7 @@ Configuration happens at two layers: the quantum service deployment and the Kube
 
 | Variable | Default | Options | Purpose |
 |---|---|---|---|
-| `QUANTUM_BACKEND` | `local` | `local`, `aer`, `aer_noise`, `ibm_real` | Backend simulator or IBM Quantum real hardware |
+| `QUANTUM_BACKEND` | `local` | `local`, `aer`, `aer_noise` | Backend simulator (no credentials needed); use IBM Quantum credentials for real hardware |
 | `QUANTUM_QUBITS` | `5` | `5`, `12`, `16`, `32` | Number of qubits in the circuit |
 | `TZ` | `America/Los_Angeles` | [IANA timezone](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) | Timezone for service logs and timestamps |
 | `PORT` | `5000` | (do not change) | Flask listen port — must match `targetPort` in `service.yaml` |
