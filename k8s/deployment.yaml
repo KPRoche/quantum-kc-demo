@@ -21,7 +21,7 @@ spec:
     spec:
       containers:
       - name: quantum-tie
-        image: ghcr.io/kproche/quantum-kc-demo:v0.3.26
+        image: ghcr.io/kproche/quantum-kc-demo:v0.3.27
         imagePullPolicy: Always
         ports:
         - containerPort: 5000
@@ -59,10 +59,10 @@ spec:
           failureThreshold: 3
         resources:
           requests:
-            memory: "512Mi"
+            memory: "1Gi" #"512Mi"
             cpu: "250m"
           limits:
-            memory: "2Gi"
+            memory: "4Gi" #"2Gi"
             cpu: "1000m"
         volumeMounts:
         - name: credentials
