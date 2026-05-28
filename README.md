@@ -375,10 +375,10 @@ curl -X POST http://localhost:5000/api/qasm/file \
 **Via CLI:**
 ```bash
 # Run Bell state circuit
-python QuantumKCDemo.v0_3.py -b:aer -f:bell.qasm
+python QuantumKCDemo.v0_4.py -b:aer -f:bell.qasm
 
 # Run with noise model
-python QuantumKCDemo.v0_3.py -b:aer_noise -f:bell.qasm -hex
+python QuantumKCDemo.v0_4.py -b:aer_noise -f:bell.qasm -hex
 ```
 
 **Via Console:**

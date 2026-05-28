@@ -1,0 +1,9 @@
+# Test-only dependencies for quantum-kc-demo. Not installed into the
+# production container image — pull these in locally with:
+#
+#     pip install -r requirements-dev.txt
+#     pytest tests/
+#
+# Keeping these out of requirements-docker.txt keeps the runtime image lean.
+pytest>=8.0
+pytest-mock>=3.10

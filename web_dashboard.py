@@ -1146,41 +1146,177 @@ def save_authentication():
         }), 500
 
 
+"""Default location of Qiskit's account JSON. Kept as a module constant so
+tests can patch it without monkeypatching qiskit internals. Mirrors
+``qiskit_ibm_runtime.accounts.management._DEFAULT_ACCOUNT_CONFIG_JSON_FILE``;
+that constant is private so we don't import it directly."""
+QISKIT_ACCOUNT_FILE = Path.home() / ".qiskit" / "qiskit-ibm.json"
+
+
+def _check_token_stored():
+    """Return whether a saved IBM token exists in any persistent location.
+
+    Checks two files because they can be on different volumes:
+      * ``CREDENTIALS_DIR / "auth.json"`` — our masked-CRN sidecar (currently
+        on emptyDir, lost on pod restart).
+      * ``~/.qiskit/qiskit-ibm.json`` — Qiskit's account store (on the
+        ``qiskit-config`` PV, survives pod restart).
+
+    Either present = a token is saved on the backend. Returns ``True`` if
+    either exists. Raises ``OSError`` only if the filesystem check itself
+    fails (permission denied on the parent dir, etc.) — those rare cases
+    drive the narrow 500 path.
+    """
+    auth_json = CREDENTIALS_DIR / "auth.json"
+    return auth_json.exists() or QISKIT_ACCOUNT_FILE.exists()
+
+
 @app.route("/api/auth/status", methods=["GET"])
 def get_auth_status():
-    """Check if IBM Quantum authentication is configured"""
+    """Report IBM Quantum auth state.
+
+    Returns 200 with a structured payload for every case the handler can
+    answer (no token, token present + validates, token present + drift,
+    token present + IBM upstream blip). Returns 500 only when the handler
+    itself cannot form an answer — e.g., a credentials file is unreadable
+    due to a filesystem-level error.
+
+    Response shape (v0.4.0):
+
+    .. code-block:: json
+
+        {
+            "tokenStored":   true,
+            "authenticated": false,
+            "message":       "human-readable summary",
+            "crn":           "masked CRN, if known",
+            "lastIbmError":  null
+        }
+
+    ``lastIbmError`` (when validation was attempted and failed) shape:
+
+    .. code-block:: json
+
+        {
+            "code":      "rate_limited | service_unavailable | timeout | account_not_found | unknown",
+            "message":   "raw error text",
+            "retryable": true
+        }
+    """
+    auth_json = CREDENTIALS_DIR / "auth.json"
+
+    # Pure filesystem check — never depends on IBM, never throws on its own.
+    # A genuine read error (permission denied, etc.) drives the narrow 500.
+    try:
+        token_stored = _check_token_stored()
+    except OSError as e:
+        return jsonify({
+            "tokenStored": False,
+            "authenticated": False,
+            "message": f"Error reading credentials file: {e}",
+            "lastIbmError": None,
+        }), 500
+
+    response = {
+        "tokenStored": token_stored,
+        "authenticated": False,
+        "message": (
+            "No IBM Quantum credentials found. Please configure authentication."
+            if not token_stored
+            else "Credentials saved but not validated this call."
+        ),
+        "lastIbmError": None,
+    }
+
+    # Pull masked CRN from auth.json if present. This is a display-only
+    # nicety; absence of auth.json (e.g. after pod restart on emptyDir) is
+    # not an error — Qiskit's account file may still hold the real token.
+    if token_stored and auth_json.exists():
+        try:
+            with open(auth_json, "r") as f:
+                auth_data = json.load(f)
+                masked = auth_data.get("crn_masked")
+                if masked:
+                    response["crn"] = masked
+        except (OSError, ValueError) as e:
+            # Corrupt/unreadable auth.json IS a real handler-level failure.
+            return jsonify({
+                "tokenStored": token_stored,
+                "authenticated": False,
+                "message": f"Credentials file present but unreadable: {e}",
+                "lastIbmError": None,
+            }), 500
+
+    # Only attempt IBM validation if a token actually exists. This avoids
+    # hitting IBM (and surfacing transient upstream errors) for users on
+    # local-only backends who never saved a token.
+    if not token_stored:
+        return jsonify(response)
+
     try:
         from qiskit_ibm_runtime import QiskitRuntimeService
         from qiskit_ibm_runtime.accounts.exceptions import AccountNotFoundError
-
-        try:
-            service = QiskitRuntimeService()
-            # If we get here, authentication is available
-            config_path = CREDENTIALS_DIR / "auth.json"
-            crn_display = "Configured"
-
-            if config_path.exists():
-                with open(config_path, 'r') as f:
-                    auth_data = json.load(f)
-                    crn_display = auth_data.get("crn_masked", "Configured")
-
-            return jsonify({
-                "authenticated": True,
-                "message": "IBM Quantum credentials are configured",
-                "crn": crn_display
-            })
-
-        except AccountNotFoundError:
-            return jsonify({
-                "authenticated": False,
-                "message": "No IBM Quantum credentials found. Please configure authentication."
-            })
-
-    except Exception as e:
+    except ImportError as e:
         return jsonify({
+            "tokenStored": token_stored,
             "authenticated": False,
-            "message": f"Error checking authentication: {str(e)}"
+            "message": f"Qiskit runtime not available: {e}",
+            "lastIbmError": None,
         }), 500
+
+    try:
+        QiskitRuntimeService()
+        response["authenticated"] = True
+        response["message"] = "IBM Quantum credentials are configured."
+        return jsonify(response)
+    except AccountNotFoundError as e:
+        # Drift: a credentials file exists on disk but Qiskit's account store
+        # doesn't have the matching account. Treat as stored-but-not-validated;
+        # the Console badge sits at "Stored" until the user re-saves.
+        response["message"] = "Credentials file present but Qiskit account missing."
+        response["lastIbmError"] = {
+            "code": "account_not_found",
+            "message": str(e),
+            "retryable": False,
+        }
+        return jsonify(response)
+    except Exception as e:
+        # Any other validation failure (network, IBM upstream rate-limit /
+        # 5xx / timeout, library-internal). Classify and report — do NOT
+        # 500. The token is still stored; this is upstream weather.
+        response["message"] = "Could not validate credentials with IBM Quantum."
+        response["lastIbmError"] = _classify_ibm_error(e)
+        return jsonify(response)
+
+
+# Keyword classifiers for IBM upstream error messages. Kept narrow on purpose:
+# anything we don't recognize falls through to "unknown" with retryable=False
+# so the Console doesn't paint a yellow "we'll keep retrying" banner over a
+# genuinely fatal error like a malformed token.
+_IBM_RATE_LIMIT_KEYWORDS = ("rate limit", "rate-limit", "too many requests", "429")
+_IBM_SERVICE_UNAVAILABLE_KEYWORDS = (
+    "service unavailable",
+    "503",
+    "max retries",
+    "bad gateway",
+    "502",
+    "gateway timeout",
+    "504",
+)
+_IBM_TIMEOUT_KEYWORDS = ("timeout", "timed out", "connection reset")
+
+
+def _classify_ibm_error(exc):
+    """Map an IBM upstream exception to a structured `lastIbmError` payload."""
+    msg = str(exc)
+    lowered = msg.lower()
+    if any(k in lowered for k in _IBM_RATE_LIMIT_KEYWORDS):
+        return {"code": "rate_limited", "message": msg, "retryable": True}
+    if any(k in lowered for k in _IBM_SERVICE_UNAVAILABLE_KEYWORDS):
+        return {"code": "service_unavailable", "message": msg, "retryable": True}
+    if any(k in lowered for k in _IBM_TIMEOUT_KEYWORDS):
+        return {"code": "timeout", "message": msg, "retryable": True}
+    return {"code": "unknown", "message": msg, "retryable": False}
 
 
 @app.route("/api/auth/clear", methods=["DELETE"])
