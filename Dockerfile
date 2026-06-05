@@ -38,7 +38,7 @@ COPY requirements-docker.txt .
 RUN pip install --no-cache /wheels/* && rm -rf /wheels
 
 # Copy application files
-COPY QuantumKCDemo.v0_4.py qapp.py
+COPY QuantumKCDemo.v0_5.py qapp.py
 COPY quantum_control.py quantum_control.py
 #COPY expt.qasm expt.qasm
 #COPY expt12.qasm expt12.qasm
@@ -75,7 +75,7 @@ ENV QUANTUM_DISPLAY_MODE=svg \
     QUANTUM_BACKEND=local \
     QUANTUM_QUBITS=5 \
     FLASK_ENV=production \
-    APP_VERSION=v0.4.0 \
+    APP_VERSION=v0.5.0 \
     SVG_OUTPUT_DIR=/app/files/svg \
     QASM_DIR=/app/files/qasm \
     CONTROL_DIR=/app/files/control \

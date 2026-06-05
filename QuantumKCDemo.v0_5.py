@@ -1,5 +1,5 @@
 #----------------------------------------------------------------------
-#     QuantumKCDemo.v0_2
+#     QuantumKCDemo.v0_5
 #       by KPRoche (Kevin P. Roche) (c) 2017,2018,2019,2020,2021,2022,2024,2025
 #
 #   ============== August 2025 Updates
@@ -69,6 +69,7 @@
 #        OTHER options:
 #           -tee | switches to a tee-shaped 5-qubit arrangement
 #           -16 or 16 | loads a 16-qubit QASM file and switches to a 16-bit display arrangement
+#           -20 or 20 | loads a 20-qubit QASM file (useful for testing noisy simulator boundaries)
 #               NOTE: hex display mode will override the 16 qubit display and show only the first 12
 #           -noq | does not show a logo during the rainbow "thinking" moment; instead rainbows the qubit display
 #           -e | will attempt to spin up a SenseHat emulator display on your desktop. 
@@ -765,6 +766,8 @@ def find_qasm_file(qasmfileinput):
         qasmfilename = "expt.qasm"
     elif '32' in qasmfileinput:
         qasmfilename = 'expt32.qasm'
+    elif '20' in qasmfileinput:
+        qasmfilename = 'expt20.qasm'
     elif '16' in qasmfileinput:
         qasmfilename = 'expt16.qasm'
     elif '12' in qasmfileinput:
@@ -792,6 +795,31 @@ def find_qasm_file(qasmfileinput):
         sys.exit(1)
 
     return qasmfilename
+
+def load_qasm_circuit(qasm_str):
+    """Parse an OPENQASM 2.0 or 3.x program string into a QuantumCircuit.
+
+    Sniffs the version on the first non-empty, non-comment line and dispatches
+    to the legacy QASM 2 importer or qiskit.qasm3.loads for QASM 3.
+    """
+    version = 2
+    for line in qasm_str.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("//"):
+            continue
+        if stripped.startswith("OPENQASM"):
+            try:
+                ver_token = stripped.split()[1].rstrip(";")
+                version = int(float(ver_token))
+            except (IndexError, ValueError):
+                version = 2
+        break
+
+    if version >= 3:
+        from qiskit import qasm3
+        print("Parsing as OpenQASM 3")
+        return qasm3.loads(qasm_str)
+    return QuantumCircuit.from_qasm_str(qasm_str)
 
 def execute_circuit_once(qcirc, qasm_circuit_obj, loop_iteration=0):
     """Execute a single quantum circuit and return results"""
@@ -1191,6 +1219,7 @@ def apply_parameters(parameter_list):
         if type(parameter) is str:
             if 'debug' in parameter: debug = True
             if ('16' == parameter or "-16" == parameter): qasmfileinput='16'
+            if ('20' == parameter or "-20" == parameter): qasmfileinput='20'
             if ('12' == parameter or "-12" == parameter): qasmfileinput='12'
             if '-local' in parameter: UseLocal = True
             if '-nois' in parameter:
@@ -1360,6 +1389,7 @@ if (len(sys.argv)>1):
             print("Parameter ",p," ",parameter)
             if 'debug' in parameter: debug = True
             if ('16' == parameter or "-16" == parameter): qasmfileinput='16'
+            if ('20' == parameter or "-20" == parameter): qasmfileinput='20'
             if ('12' == parameter or "-12" == parameter): qasmfileinput='12'
             if '-local' in parameter: UseLocal = True      # use the aer local simulator instead of the web API
             if '-nois' in parameter:                       # add noise model to local simulator
@@ -1662,7 +1692,7 @@ while outer_control_loop:
         
         #to determin the number of qubits, we have to make the circuit
             
-        qcirc=QuantumCircuit.from_qasm_str(qasm)   
+        qcirc = load_qasm_circuit(qasm)
         qubits_needed = qcirc.num_qubits
         
         # Create a fresh thread for each execution (old thread may have already finished from previous run)
@@ -1690,8 +1720,8 @@ while outer_control_loop:
                 except Exception as e:
                     print(f"[CONTROL] Could not update real_backend_name: {e}") 
         
-        qcirc=QuantumCircuit.from_qasm_str(qasm)   
-        
+        qcirc = load_qasm_circuit(qasm)
+
         # -------------------- Step 7. draw the circuit on the terminal and adjust the display settings if necessary
         try:
             print("generating circuit from QASM")# (qcirc)
@@ -1769,7 +1799,7 @@ while outer_control_loop:
             print("OPENQASM code:\n", qasm)
 
             # Create circuit from QASM
-            qasm_circuit_obj = QuantumCircuit.from_qasm_str(qasm)
+            qasm_circuit_obj = load_qasm_circuit(qasm)
             qubits_needed = qasm_circuit_obj.num_qubits
 
             # Configure display mask based on current circuit
