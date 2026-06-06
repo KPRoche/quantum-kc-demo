@@ -193,6 +193,24 @@ scriptfolder = os.path.dirname(os.path.realpath(__file__))
 
 # Status file management for backend initialization
 _BACKEND_STATUS_FILE = Path(os.environ.get("CONTROL_DIR", "/app/files/control")) / "backend_status.json"
+_QASM_ERROR_FILE = Path(os.environ.get("CONTROL_DIR", "/app/files/control")) / "qasm_error.json"
+
+def _write_qasm_error(message):
+	"""Record a QASM parse error so the dashboard can surface it."""
+	try:
+		_QASM_ERROR_FILE.parent.mkdir(parents=True, exist_ok=True)
+		with open(_QASM_ERROR_FILE, 'w') as f:
+			json.dump({"error": str(message), "timestamp": datetime.now().isoformat()}, f)
+	except Exception as e:
+		print(f"[WARNING] Could not write qasm_error file: {e}")
+
+def _clear_qasm_error():
+	"""Remove the QASM parse error file (e.g. after a successful parse)."""
+	try:
+		if _QASM_ERROR_FILE.exists():
+			_QASM_ERROR_FILE.unlink()
+	except Exception as e:
+		print(f"[WARNING] Could not remove qasm_error file: {e}")
 
 def _write_backend_status(state):
 	"""Write backend status file to indicate what the subprocess is doing"""
@@ -800,7 +818,9 @@ def load_qasm_circuit(qasm_str):
     """Parse an OPENQASM 2.0 or 3.x program string into a QuantumCircuit.
 
     Sniffs the version on the first non-empty, non-comment line and dispatches
-    to the legacy QASM 2 importer or qiskit.qasm3.loads for QASM 3.
+    to the legacy QASM 2 importer or qiskit.qasm3.loads for QASM 3. Parse
+    errors are wrapped in ValueError so callers can surface a clean message
+    without the pod crashing on bad user input.
     """
     version = 2
     for line in qasm_str.splitlines():
@@ -818,8 +838,14 @@ def load_qasm_circuit(qasm_str):
     if version >= 3:
         from qiskit import qasm3
         print("Parsing as OpenQASM 3")
-        return qasm3.loads(qasm_str)
-    return QuantumCircuit.from_qasm_str(qasm_str)
+        try:
+            return qasm3.loads(qasm_str)
+        except Exception as e:
+            raise ValueError(f"QASM 3 parse error: {type(e).__name__}: {e}") from e
+    try:
+        return QuantumCircuit.from_qasm_str(qasm_str)
+    except Exception as e:
+        raise ValueError(f"QASM 2 parse error: {type(e).__name__}: {e}") from e
 
 def execute_circuit_once(qcirc, qasm_circuit_obj, loop_iteration=0):
     """Execute a single quantum circuit and return results"""
@@ -1691,8 +1717,15 @@ while outer_control_loop:
         # ------------------ Step 6. Instantiate our Quantum Service !
         
         #to determin the number of qubits, we have to make the circuit
-            
-        qcirc = load_qasm_circuit(qasm)
+
+        try:
+            qcirc = load_qasm_circuit(qasm)
+        except ValueError as _qe:
+            print(f"[CONTROL] {_qe}")
+            _write_qasm_error(_qe)
+            _write_backend_status("error")
+            continue  # Skip this run; wait for next command. Pod stays alive.
+        _clear_qasm_error()
         qubits_needed = qcirc.num_qubits
         
         # Create a fresh thread for each execution (old thread may have already finished from previous run)
@@ -1718,9 +1751,15 @@ while outer_control_loop:
                     real_backend_name = real_backend.name
                     print(f"[CONTROL] Updated real_backend_name from cached backend: {real_backend_name}")
                 except Exception as e:
-                    print(f"[CONTROL] Could not update real_backend_name: {e}") 
-        
-        qcirc = load_qasm_circuit(qasm)
+                    print(f"[CONTROL] Could not update real_backend_name: {e}")
+
+        try:
+            qcirc = load_qasm_circuit(qasm)
+        except ValueError as _qe:
+            print(f"[CONTROL] {_qe}")
+            _write_qasm_error(_qe)
+            _write_backend_status("error")
+            continue
 
         # -------------------- Step 7. draw the circuit on the terminal and adjust the display settings if necessary
         try:

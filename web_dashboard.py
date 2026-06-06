@@ -85,7 +85,40 @@ CREDENTIALS_DIR = Path(__file__).parent / "credentials"
 CREDENTIALS_DIR.mkdir(exist_ok=True)
 
 # Preset QASM files in project root
-PRESET_QASM_FILES = ["expt.qasm", "expt12.qasm", "expt16.qasm", "expt32.qasm"]
+PRESET_QASM_FILES = ["expt.qasm", "expt12.qasm", "expt16.qasm", "expt20.qasm", "expt32.qasm"]
+
+
+def _validate_qasm(qasm_str):
+    """Pre-validate a QASM 2.0 or 3.x program before saving.
+
+    Returns (ok: bool, message: str). On parse failure, message contains the
+    underlying error. Mirrors the dispatch logic in QuantumKCDemo.load_qasm_circuit
+    so we can reject malformed input at the upload boundary instead of letting
+    the executor crash on it.
+    """
+    version = 2
+    for line in qasm_str.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("//"):
+            continue
+        if stripped.startswith("OPENQASM"):
+            try:
+                ver_token = stripped.split()[1].rstrip(";")
+                version = int(float(ver_token))
+            except (IndexError, ValueError):
+                version = 2
+        break
+
+    try:
+        if version >= 3:
+            from qiskit import qasm3
+            qasm3.loads(qasm_str)
+        else:
+            from qiskit import QuantumCircuit
+            QuantumCircuit.from_qasm_str(qasm_str)
+    except Exception as e:
+        return False, f"QASM {version} parse error: {type(e).__name__}: {e}"
+    return True, "ok"
 
 # Loop mode result file (IPC from subprocess)
 LOOP_RESULT_FILE = FILES_DIR / "control" / "result.json"
@@ -766,6 +799,11 @@ def qasm_file():
 
         if not filename or not content:
             return jsonify({"error": "Both 'name' and 'content' are required"}), 400
+
+        # Pre-validate the QASM so a bad upload can't crash the executor.
+        ok, message = _validate_qasm(content)
+        if not ok:
+            return jsonify({"error": message}), 400
 
         # Determine file location
         if filename in PRESET_QASM_FILES:
