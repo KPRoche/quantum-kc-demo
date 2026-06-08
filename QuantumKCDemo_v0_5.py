@@ -1,5 +1,5 @@
 #----------------------------------------------------------------------
-#     QuantumKCDemo.v0_5
+#     QuantumKCDemo_v0_5
 #       by KPRoche (Kevin P. Roche) (c) 2017,2018,2019,2020,2021,2022,2024,2025
 #
 #   ============== August 2025 Updates
@@ -817,35 +817,12 @@ def find_qasm_file(qasmfileinput):
 def load_qasm_circuit(qasm_str):
     """Parse an OPENQASM 2.0 or 3.x program string into a QuantumCircuit.
 
-    Sniffs the version on the first non-empty, non-comment line and dispatches
-    to the legacy QASM 2 importer or qiskit.qasm3.loads for QASM 3. Parse
-    errors are wrapped in ValueError so callers can surface a clean message
-    without the pod crashing on bad user input.
+    Thin wrapper around qasm_io.loads_qasm; preserves the legacy
+    single-return-value signature for existing call sites in this module.
     """
-    version = 2
-    for line in qasm_str.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("//"):
-            continue
-        if stripped.startswith("OPENQASM"):
-            try:
-                ver_token = stripped.split()[1].rstrip(";")
-                version = int(float(ver_token))
-            except (IndexError, ValueError):
-                version = 2
-        break
-
-    if version >= 3:
-        from qiskit import qasm3
-        print("Parsing as OpenQASM 3")
-        try:
-            return qasm3.loads(qasm_str)
-        except Exception as e:
-            raise ValueError(f"QASM 3 parse error: {type(e).__name__}: {e}") from e
-    try:
-        return QuantumCircuit.from_qasm_str(qasm_str)
-    except Exception as e:
-        raise ValueError(f"QASM 2 parse error: {type(e).__name__}: {e}") from e
+    from qasm_io import loads_qasm
+    circuit, _version = loads_qasm(qasm_str)
+    return circuit
 
 def execute_circuit_once(qcirc, qasm_circuit_obj, loop_iteration=0):
     """Execute a single quantum circuit and return results"""

@@ -91,34 +91,12 @@ PRESET_QASM_FILES = ["expt.qasm", "expt12.qasm", "expt16.qasm", "expt20.qasm", "
 def _validate_qasm(qasm_str):
     """Pre-validate a QASM 2.0 or 3.x program before saving.
 
-    Returns (ok: bool, message: str). On parse failure, message contains the
-    underlying error. Mirrors the dispatch logic in QuantumKCDemo.load_qasm_circuit
-    so we can reject malformed input at the upload boundary instead of letting
-    the executor crash on it.
+    Returns (ok: bool, message: str). Thin wrapper around qasm_io.validate_qasm —
+    rejects malformed input at the upload boundary instead of letting the
+    executor crash on it.
     """
-    version = 2
-    for line in qasm_str.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("//"):
-            continue
-        if stripped.startswith("OPENQASM"):
-            try:
-                ver_token = stripped.split()[1].rstrip(";")
-                version = int(float(ver_token))
-            except (IndexError, ValueError):
-                version = 2
-        break
-
-    try:
-        if version >= 3:
-            from qiskit import qasm3
-            qasm3.loads(qasm_str)
-        else:
-            from qiskit import QuantumCircuit
-            QuantumCircuit.from_qasm_str(qasm_str)
-    except Exception as e:
-        return False, f"QASM {version} parse error: {type(e).__name__}: {e}"
-    return True, "ok"
+    from qasm_io import validate_qasm
+    return validate_qasm(qasm_str)
 
 # Loop mode result file (IPC from subprocess)
 LOOP_RESULT_FILE = FILES_DIR / "control" / "result.json"
@@ -198,6 +176,7 @@ class QuantumExecutor:
         self.backend = None
         self.qiskit_available = False
         self.circuit = None
+        self.qasm_version = 2
 
     def initialize(self):
         """Initialize Qiskit components"""
@@ -216,11 +195,12 @@ class QuantumExecutor:
             return False
 
     def load_qasm(self, qasm_content):
-        """Load and parse QASM content"""
+        """Load and parse QASM 2.0 or 3.x content via shared dispatcher."""
         if not self.qiskit_available:
             return False
         try:
-            self.circuit = self.QuantumCircuit.from_qasm_str(qasm_content)
+            from qasm_io import loads_qasm
+            self.circuit, self.qasm_version = loads_qasm(qasm_content)
             return True
         except Exception as e:
             print(f"Failed to load QASM: {e}")
@@ -830,22 +810,25 @@ def qasm_file():
 def qasm_active():
     """Get or load active QASM in executor"""
     if request.method == "GET":
-        # Return QASM content currently loaded in executor
-        # Check circuit under lock, release lock before calling qasm()
+        # Return QASM content currently loaded in executor.
+        # Check circuit under lock; release lock before serializing.
         with state_lock:
             if not executor.circuit:
                 return jsonify({"error": "No circuit loaded"}), 404
             circuit = executor.circuit
+            version = executor.qasm_version
 
         try:
-            content = circuit.qasm()
+            from qasm_io import dumps_qasm
+            content = dumps_qasm(circuit, version)
             num_qubits = circuit.num_qubits
             num_gates = circuit.size()
 
             return jsonify({
                 "content": content,
                 "num_qubits": num_qubits,
-                "num_gates": num_gates
+                "num_gates": num_gates,
+                "qasm_version": version
             })
         except Exception as e:
             return jsonify({"error": str(e)}), 500
