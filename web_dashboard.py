@@ -85,7 +85,7 @@ CREDENTIALS_DIR = Path(__file__).parent / "credentials"
 CREDENTIALS_DIR.mkdir(exist_ok=True)
 
 # Preset QASM files in project root
-PRESET_QASM_FILES = ["expt.qasm", "expt12.qasm", "expt16.qasm", "expt20.qasm", "expt32.qasm"]
+PRESET_QASM_FILES = ["expt.qasm", "expt12.qasm", "expt16.qasm", "expt20.qasm", "expt32.qasm", "urs.qasm"]
 
 
 def _validate_qasm(qasm_str):
