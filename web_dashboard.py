@@ -863,6 +863,54 @@ def qasm_active():
             return jsonify({"error": str(e)}), 400
 
 
+def _render_circuit_png(circuit, scale=0.5, fold=100, dpi=80):
+    """Render a QuantumCircuit to PNG bytes, falling back to PIL on RecursionError.
+
+    Qiskit 2.4.1 matplotlib drawing hits unbounded recursion on certain
+    circuits (originally seen with 12-qubit; also reproduces on the URS
+    QASM 3 program with rz(2.214297) labels). When matplotlib raises
+    RecursionError we render the ASCII drawing into a PNG via PIL so
+    callers always get an image back rather than a 500.
+
+    Returns PNG bytes. Raises RecursionError only if both matplotlib
+    AND the PIL fallback fail.
+    """
+    from io import BytesIO
+    import matplotlib.pyplot as plt
+
+    num_qubits = circuit.num_qubits
+    width = max(12, num_qubits * 0.3)
+    height = max(8, num_qubits * 0.15 + 3)
+
+    fig = None
+    try:
+        fig = circuit.draw(output='mpl', scale=scale, fold=fold)
+        fig.set_size_inches(width, height)
+        for ax in fig.get_axes():
+            ax.set_title('')
+        buffer = BytesIO()
+        fig.savefig(buffer, format='png', dpi=dpi, bbox_inches='tight')
+        plt.close(fig)
+        return buffer.getvalue()
+    except RecursionError:
+        if fig is not None:
+            plt.close(fig)
+        ascii_circuit = str(circuit.draw(output='text'))
+        from PIL import Image, ImageDraw
+        lines = ascii_circuit.split('\n')
+        line_height = 12
+        char_width = 7
+        img_height = max(300, len(lines) * line_height + 20)
+        img_width = max(800, (max((len(line) for line in lines if line), default=0) + 5) * char_width)
+        img = Image.new('RGB', (img_width, img_height), color='white')
+        draw = ImageDraw.Draw(img)
+        for i, line in enumerate(lines):
+            draw.text((10, 10 + i * line_height), line, fill='black')
+        buffer = BytesIO()
+        img.save(buffer, format='png')
+        return buffer.getvalue()
+
+
 @app.route("/api/qasm/circuit", methods=["GET"])
 def get_circuit_diagram():
     """Get circuit diagram as HTML with matplotlib rendering"""
@@ -903,24 +951,13 @@ def get_circuit_diagram():
             return html_content, 200, {'Content-Type': 'text/html'}
 
     try:
-        # Generate circuit diagram using matplotlib
-        from io import BytesIO
         import base64
 
-        num_qubits = executor.circuit.num_qubits
-        # Scale width based on qubit count (0.3 inches per qubit, minimum 12)
-        width = max(12, num_qubits * 0.3)
-        height = max(8, num_qubits * 0.15 + 3)
-
-        # fold=-1 disables wrapping, draw entire circuit horizontally
-        fig = executor.circuit.draw(output='mpl', scale=0.7, fold=-1)
-        fig.set_size_inches(width, height)
-
-        # Convert matplotlib figure to PNG base64
-        buffer = BytesIO()
-        fig.savefig(buffer, format='png', bbox_inches='tight', dpi=100)
-        buffer.seek(0)
-        image_base64 = base64.b64encode(buffer.read()).decode()
+        # Render via shared helper — falls back to PIL/ASCII PNG on
+        # RecursionError so this endpoint never 500s on circuits that
+        # trip Qiskit 2.4.1's matplotlib drawing.
+        png_bytes = _render_circuit_png(executor.circuit, scale=0.7, fold=-1, dpi=100)
+        image_base64 = base64.b64encode(png_bytes).decode()
 
         # Create HTML wrapper with embedded image
         html_content = f"""
@@ -994,54 +1031,11 @@ def get_circuit_png():
 
     try:
         from io import BytesIO
-        import sys
-        import traceback
-        num_qubits = executor.circuit.num_qubits
-        # Scale width based on qubit count (0.3 inches per qubit, minimum 12)
-        width = max(12, num_qubits * 0.3)
-        height = max(8, num_qubits * 0.15 + 3)
 
-        # Qiskit 2.4.1 matplotlib rendering hits recursion limits for large circuits
-        # Fall back to rendering ASCII as PNG using PIL when matplotlib fails
-        buffer = None
-        fig = None
-        import matplotlib.pyplot as plt
-        try:
-            fig = executor.circuit.draw(output='mpl', scale=0.5, fold=100)
-            fig.set_size_inches(width, height)
-            for ax in fig.get_axes():
-                ax.set_title('')
-            buffer = BytesIO()
-            fig.savefig(buffer, format='png', dpi=80)
-        except RecursionError:
-            # matplotlib failed, render ASCII as image instead
-            if fig:
-                plt.close(fig)
-            try:
-                ascii_circuit = str(executor.circuit.draw(output='text'))
-                from PIL import Image, ImageDraw, ImageFont
-                lines = ascii_circuit.split('\n')
-                line_height = 12
-                char_width = 7
-                img_height = max(300, len(lines) * line_height + 20)
-                img_width = max(800, (max(len(line) for line in lines if line) + 5) * char_width)
-                img = Image.new('RGB', (img_width, img_height), color='white')
-                draw = ImageDraw.Draw(img)
-                for i, line in enumerate(lines):
-                    draw.text((10, 10 + i * line_height), line, fill='black')
-                buffer = BytesIO()
-                img.save(buffer, format='png')
-            except Exception as pil_error:
-                with open("/tmp/png_error.log", "a") as f:
-                    f.write(f"\nPIL fallback failed: {str(pil_error)}\n")
-                raise
-
-        if buffer:
-            buffer.seek(0)
-            return send_file(buffer, mimetype='image/png', as_attachment=False)
-        else:
-            return jsonify({"error": "Failed to render circuit PNG"}), 500
+        png_bytes = _render_circuit_png(executor.circuit, scale=0.5, fold=100, dpi=80)
+        return send_file(BytesIO(png_bytes), mimetype='image/png', as_attachment=False)
     except RecursionError as re:
+        # Both matplotlib AND the PIL fallback failed — extremely rare.
         import traceback as tb
         with open("/tmp/png_error.log", "a") as f:
             tb.print_exc(file=f, limit=10)
